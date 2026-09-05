@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StockIntel: The Thesis</title>
+<style>
+  :root {
+    --ink: #2a2333;
+    --paper: rgba(255,255,255,0.82);
+    --sans: ui-sans-serif, system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    --serif: Georgia, 'Iowan Old Style', Palatino, ui-serif, serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: var(--sans); color: var(--ink);
+    background: linear-gradient(to bottom, #6fb7ff 0%, #dff0ff 60%, #f5efe6 100%);
+    background-attachment: fixed; min-height: 100%;
+  }
+  .nav { display: flex; align-items: center; gap: 26px; padding: 18px clamp(16px, 4vw, 48px); font-size: 14px; }
+  .nav b { font-family: var(--serif); font-weight: 400; font-size: 20px; }
+  .nav a { color: var(--ink); text-decoration: none; opacity: 0.75; }
+  .nav a:hover { opacity: 1; }
+  .nav .spacer { flex: 1; }
+  .nav .btn { opacity: 1; }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 32px 20px 96px; }
+  .card { background: var(--paper); backdrop-filter: blur(8px); border-radius: 16px; box-shadow: 0 12px 40px rgba(20,20,50,0.14); padding: clamp(24px, 4vw, 44px); margin: 0 0 28px; }
+  .kicker { margin: 0; font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; opacity: 0.6; }
+  .card h1, .card h2 { margin: 10px 0 0; font-family: var(--serif); font-weight: 400; font-size: clamp(26px, 3.6vw, 38px); line-height: 1.1; }
+  .card p.lead { margin: 14px 0 0; font-size: clamp(15px, 1.8vw, 18px); line-height: 1.6; opacity: 0.9; }
+  .ticks { margin: 18px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+  .ticks li { padding-left: 26px; position: relative; line-height: 1.55; }
+  .ticks li::before { content: "▸"; position: absolute; left: 4px; opacity: 0.6; }
+  .steps { margin: 18px 0 0; padding: 0; list-style: none; display: grid; gap: 14px; }
+  .steps li { line-height: 1.6; }
+  .sample-grid { margin: 18px 0 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .metric { background: rgba(255,255,255,0.65); border-radius: 10px; padding: 12px 14px; }
+  .metric small { display: block; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.6; }
+  .metric strong { display: block; margin-top: 4px; font-size: 17px; }
+  .cta-row { margin-top: 22px; display: flex; flex-wrap: wrap; gap: 10px; }
+  .btn { display: inline-block; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; color: var(--ink); border: 1px solid rgba(42,35,51,0.35); border-radius: 999px; padding: 12px 22px; }
+  .btn:hover { background: rgba(255,255,255,0.8); }
+  .btn.solid { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .foot { text-align: center; font-size: 12px; opacity: 0.65; padding: 8px 20px 48px; }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <b><a href="index.html">StockIntel</a></b>
+  <span class="spacer"></span>
+  <a href="/app" class="btn solid" style="background:var(--ink);color:#fff;border-radius:999px;padding:10px 20px;">Enter the app</a>
+</nav>
+<main class="wrap">
+  <section class="card" id="problem">
+    <p class="kicker">The problem</p>
+    <h2>Prices react to events. We find the events first.</h2>
+    <p class="lead">A trader watching NVDA will not find its next move by searching “NVDA”. The move starts elsewhere: a hyperscaler announces a $10B AI buildout, TSMC guides capacity up, a power supplier wins a data-center contract. StockIntel investigates the world behind the ticker and turns what it finds into ranked market impact assessments with reasoning and verifiable sources.</p>
+    <ul class="ticks">
+      <li>what event could materially change a stock's value</li>
+      <li>who is economically exposed: customers, suppliers, infrastructure</li>
+      <li>when the impact window opens, and how fresh the signal is</li>
+      <li>what evidence proves each link, and what could invalidate it</li>
+    </ul>
+  </section>
+
+  <section class="card" id="how">
+    <p class="kicker">The loop</p>
+    <h2>World → Event → Exposure → Thesis → Market check</h2>
+    <ol class="steps">
+      <li><b>Target.</b> You name a ticker. Say NVDA.</li>
+      <li><b>Fan out.</b> StockIntel investigates everything around the asset: data-center builds, hyperscaler capex, TSMC, suppliers, power and cooling, hiring, filings, procurement, interviews, factory footage. Never the ticker directly.</li>
+      <li><b>Event.</b> A discovery surfaces: a hyperscale AI infrastructure expansion.</li>
+      <li><b>Exposure.</b> One event fans into many: GPUs → NVDA, memory → MU, servers → DELL, networking → AVGO. Each edge carries its evidence.</li>
+      <li><b>Market check.</b> Only then, via Binance Agent OS, the agent reads live price, volume and your position, and says whether the market has reacted yet.</li>
+    </ol>
+    <p class="lead">The sequence matters: the thesis is formed independently, then contextualized against price. Never the reverse.</p>
+  </section>
+
+  <section class="card" id="sample">
+    <p class="kicker">Sample output</p>
+    <h2>Market Impact Assessment: NVDA</h2>
+    <div class="sample-grid">
+      <div class="metric"><small>Impact</small><strong>Positive</strong></div>
+      <div class="metric"><small>Magnitude</small><strong>High</strong></div>
+      <div class="metric"><small>Confidence</small><strong>82%</strong></div>
+      <div class="metric"><small>Freshness</small><strong>34 min</strong></div>
+      <div class="metric"><small>Price reaction</small><strong>+0.4%</strong></div>
+      <div class="metric"><small>Also exposed</small><strong>MU · DELL · AVGO</strong></div>
+    </div>
+    <p class="lead"><b>Why:</b> a newly announced hyperscale infrastructure project implies additional accelerator and networking demand; NVIDIA is a primary beneficiary through GPU exposure. The announcement is recent and the observed price move is small, suggesting it may not be fully reflected yet.</p>
+    <p class="lead"><b>What could invalidate this:</b> existing supply commitments, delayed deployment, or spending directed toward alternative accelerator architectures.</p>
+    <p class="lead" style="opacity:.65">An analytical assessment, not a prediction. Every claim ships with its source links.</p>
+  </section>
+
+  <section class="card" id="agent-os">
+    <p class="kicker">Built for Binance Agent OS</p>
+    <h2>Intel first. Market context on tap.</h2>
+    <p class="lead">StockIntel runs its investigation off-market, then uses the Binance Agent OS MCP server for read-only context: live bStocks prices, volume, balances and positions inside a permissioned sub-account. No withdrawals, ever. The agent proposes; you decide.</p>
+    <p class="cta-row">
+      <a class="btn solid" href="/app">Enter the app</a>
+      <a class="btn" href="index.html">Back to the city ↑</a>
+    </p>
+  </section>
+</main>
+<footer class="foot">StockIntel · market impact assessments, not financial advice · Track A: Binance Agent OS Mini Hackathon</footer>
+</body>
+</html>

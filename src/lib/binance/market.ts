@@ -1,0 +1,150 @@
+/**
+ * Binance market context — the read-only half of the Agent OS market check.
+ *
+ * Public market data needs no key and comes straight from Binance REST
+ * (the same data the Agent OS MCP server exposes). Authenticated calls
+ * (account, positions, trading) unlock when BINANCE_API_KEY / SECRET are
+ * set — see `./agent-os.ts`.
+ */
+
+const REST_BASE = "https://api.binance.com";
+
+export type Quote = {
+  ticker: string;
+  symbol: string | null;
+  price: number | null;
+  change24hPct: number | null;
+  volume24hQuote: number | null;
+};
+
+type Resolved = { symbol: string; price: number; change24hPct: number; volume24hQuote: number };
+
+const cache = new Map<string, { at: number; value: Resolved | null }>();
+const CACHE_TTL_MS = 30_000;
+
+/** "NVDA (200 shares)" -> "NVDA". First letter-run, uppercased. */
+export function extractTicker(name: string): string {
+  const match = /^[A-Za-z]{1,6}/.exec(name.trim());
+  return (match?.[0] ?? "").toUpperCase();
+}
+
+/** Company names we already know how to map to tickers. */
+export function companyToTicker(name: string): string | null {
+  const upper = name.trim().toUpperCase();
+  if (KNOWN_COMPANIES[upper]) return KNOWN_COMPANIES[upper]!;
+  for (const [company, ticker] of Object.entries(KNOWN_COMPANIES)) {
+    if (upper.includes(company)) return ticker;
+  }
+  return null;
+}
+export const KNOWN_COMPANIES: Record<string, string> = {
+  NVIDIA: "NVDA",
+  TESLA: "TSLA",
+  APPLE: "AAPL",
+  MICROSOFT: "MSFT",
+  AMAZON: "AMZN",
+  META: "META",
+  ALPHABET: "GOOGL",
+  GOOGLE: "GOOGL",
+  JPMORGAN: "JPM",
+  BROADCOM: "AVGO",
+  MICRON: "MU",
+  DELL: "DELL",
+  PALANTIR: "PLTR",
+};
+
+async function fetch24hr(symbol: string): Promise<Resolved | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8_000);
+  try {
+    const res = await fetch(`${REST_BASE}/api/v3/ticker/24hr?symbol=${symbol}`, {
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    const j = (await res.json()) as {
+      lastPrice?: string;
+      priceChangePercent?: string;
+      quoteVolume?: string;
+    };
+    const price = Number(j.lastPrice);
+    if (!Number.isFinite(price)) return null;
+    return {
+      symbol,
+      price,
+      change24hPct: Number(j.priceChangePercent) || 0,
+      volume24hQuote: Number(j.quoteVolume) || 0,
+    };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Resolve a ticker to a Binance symbol. bStocks (tokenized equities like
+ * NVDAB) are tried first, then plain USDT pairs (BTC, ETH, …).
+ */
+export async function resolveQuote(ticker: string): Promise<Resolved | null> {
+  const key = ticker.toUpperCase();
+  if (!key) return null;
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.value;
+  const candidates = key.endsWith("B") ? [`${key}USDT`, `${key.slice(0, -1)}BUSDT`] : [`${key}BUSDT`, `${key}USDT`];
+  let value: Resolved | null = null;
+  for (const symbol of candidates) {
+    value = await fetch24hr(symbol);
+    if (value) break;
+  }
+  cache.set(key, { at: Date.now(), value });
+  return value;
+}
+
+export async function getQuotes(tickers: string[]): Promise<Quote[]> {
+  const unique = Array.from(new Set(tickers.map((t) => t.toUpperCase()).filter(Boolean))).slice(0, 20);
+  return Promise.all(
+    unique.map(async (ticker) => {
+      const r = await resolveQuote(ticker);
+      return r
+        ? { ticker, symbol: r.symbol, price: r.price, change24hPct: r.change24hPct, volume24hQuote: r.volume24hQuote }
+        : { ticker, symbol: null, price: null, change24hPct: null, volume24hQuote: null };
+    }),
+  );
+}
+
+export type CompanyMarket = { symbol: string; price: number; change24hPct: number };
+
+/**
+ * The live market check for a readout: map assessed companies to tickers,
+ * snapshot Binance prices. Advisory only — throws nothing, resolves nulls.
+ */
+export async function buildMarketSnapshot(
+  companies: string[],
+  question: string,
+): Promise<{ lines: string[]; byCompany: Map<string, CompanyMarket> }> {
+  const tickers = new Set<string>();
+  for (const name of companies) {
+    const mapped = companyToTicker(name);
+    if (mapped) tickers.add(mapped);
+  }
+  const qTick = extractTicker(question.replace(/^watch\s+/i, ""));
+  if (qTick) tickers.add(qTick);
+  const byCompany = new Map<string, CompanyMarket>();
+  const lines: string[] = [];
+  if (tickers.size === 0) return { lines, byCompany };
+  const quotes = await getQuotes([...tickers]);
+  for (const q of quotes) {
+    if (!q.symbol || q.price === null) {
+      lines.push(`${q.ticker}: no Binance listing`);
+      continue;
+    }
+    const pct = q.change24hPct ?? 0;
+    lines.push(`${q.ticker} (${q.symbol}): $${q.price.toFixed(2)} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}% 24h)`);
+    for (const name of companies) {
+      if (companyToTicker(name) === q.ticker) {
+        byCompany.set(name, { symbol: q.symbol, price: q.price, change24hPct: pct });
+      }
+    }
+  }
+  return { lines, byCompany };
+}
