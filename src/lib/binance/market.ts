@@ -24,19 +24,74 @@ const CACHE_TTL_MS = 30_000;
 
 /** "NVDA (200 shares)" -> "NVDA". First letter-run, uppercased. */
 export function extractTicker(name: string): string {
-  const match = /^[A-Za-z]{1,6}/.exec(name.trim());
+  const match = /^[A-Za-z]{1,12}/.exec(name.trim());
   return (match?.[0] ?? "").toUpperCase();
 }
 
 /** Company names we already know how to map to tickers. */
 export function companyToTicker(name: string): string | null {
-  const upper = name.trim().toUpperCase();
-  if (KNOWN_COMPANIES[upper]) return KNOWN_COMPANIES[upper]!;
-  for (const [company, ticker] of Object.entries(KNOWN_COMPANIES)) {
-    if (upper.includes(company)) return ticker;
-  }
-  return null;
+  return companyTickers(name)[0] ?? null;
 }
+
+/**
+ * Every plausible ticker for a company name, best guess first. This is
+ * symbol resolution, not investigation: each candidate is verified live
+ * against Binance, and misses simply resolve to nothing. Nothing here
+ * says what to investigate for any ticker. Works for any of the
+ * thousands of listed names, not just the familiar ones.
+ */
+export function companyTickers(name: string): string[] {
+  const out: string[] = [];
+  const push = (t: string) => {
+    const u = t.toUpperCase().replace(/[^A-Z]/g, "");
+    if (u.length >= 1 && u.length <= 12 && !out.includes(u)) out.push(u);
+  };
+  const upper = name.trim().toUpperCase();
+  if (KNOWN_COMPANIES[upper]) push(KNOWN_COMPANIES[upper]!);
+  for (const [company, ticker] of Object.entries(KNOWN_COMPANIES)) {
+    if (upper.includes(company)) {
+      push(ticker);
+      break;
+    }
+  }
+  // Ticker hints authors leave in text: "Nebius Group (NBIS)", "NYSE:DELL".
+  for (const m of name.matchAll(/\(([A-Z]{1,6})\)/g)) push(m[1]!);
+  const exch = name.match(/(?:NYSE|NASDAQ|HKEX|TSE|KRX|LSE)\s*:\s*([A-Z0-9]{1,8})/i);
+  if (exch?.[1]) push(exch[1]);
+  const tokens = name
+    .replace(/[^A-Za-z\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  for (const t of tokens) {
+    if (!NAME_STOP.has(t.toUpperCase())) push(t);
+  }
+  if (tokens.length >= 2 && tokens.length <= 5) {
+    const initials = tokens.map((t) => t[0]!.toUpperCase()).join("");
+    if (initials.length >= 2 && initials.length <= 5) push(initials);
+  }
+  const squashed = tokens.join("").toUpperCase();
+  if (squashed.length >= 2) push(squashed);
+  return out;
+}
+const NAME_STOP = new Set([
+  "GROUP",
+  "HOLDINGS",
+  "HOLDING",
+  "INC",
+  "CORP",
+  "CORPORATION",
+  "LTD",
+  "LIMITED",
+  "COMPANY",
+  "COMPANIES",
+  "CLASS",
+  "PLC",
+  "LLC",
+  "NV",
+  "SA",
+  "AG",
+  "AB",
+]);
 export const KNOWN_COMPANIES: Record<string, string> = {
   NVIDIA: "NVDA",
   TESLA: "TSLA",
@@ -51,6 +106,8 @@ export const KNOWN_COMPANIES: Record<string, string> = {
   MICRON: "MU",
   DELL: "DELL",
   PALANTIR: "PLTR",
+  TSMC: "TSM",
+  "TAIWAN SEMICONDUCTOR": "TSM",
 };
 
 async function fetch24hr(symbol: string): Promise<Resolved | null> {
@@ -124,8 +181,14 @@ export async function buildMarketSnapshot(
 ): Promise<{ lines: string[]; byCompany: Map<string, CompanyMarket> }> {
   const tickers = new Set<string>();
   for (const name of companies) {
-    const mapped = companyToTicker(name);
-    if (mapped) tickers.add(mapped);
+    // Try every candidate spelling; the first live Binance listing wins.
+    for (const t of companyTickers(name).slice(0, 4)) {
+      const r = await resolveQuote(t);
+      if (r) {
+        tickers.add(t);
+        break;
+      }
+    }
   }
   const qTick = extractTicker(question.replace(/^watch\s+/i, ""));
   if (qTick) tickers.add(qTick);
@@ -141,7 +204,7 @@ export async function buildMarketSnapshot(
     const pct = q.change24hPct ?? 0;
     lines.push(`${q.ticker} (${q.symbol}): $${q.price.toFixed(2)} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}% 24h)`);
     for (const name of companies) {
-      if (companyToTicker(name) === q.ticker) {
+      if (companyTickers(name).includes(q.ticker)) {
         byCompany.set(name, { symbol: q.symbol, price: q.price, change24hPct: pct });
       }
     }

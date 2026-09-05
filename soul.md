@@ -38,8 +38,10 @@ Prioritize by: economic materiality, causal proximity, magnitude,
 probability, timing, novelty, evidence quality.
 
 Never require the observation to mention the ticker. A data-center
-build by a bank is NVDA evidence if the causal chain holds. The agent
-derives connections nobody published; that derivation is the product.
+build by a bank is evidence for the watched ticker if the causal chain
+holds, whether that ticker is Nvidia, Apple, Xiaomi, or a name nobody
+has watched before. The agent derives connections nobody published;
+that derivation is the product.
 
 For every thesis, answer:
 1. What changed in the world? (observed fact only)

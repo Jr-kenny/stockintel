@@ -5,7 +5,7 @@ import { chatJson, computeRouterConfig } from "@/lib/0g/compute-router";
 import { chatJsonOpenRouter, openRouterConfig } from "@/lib/llm/openrouter";
 import { chatJsonZen, zenConfig } from "@/lib/llm/zen";
 import { guidedSystem } from "./soul";
-import { buildMarketSnapshot, companyToTicker, extractTicker } from "@/lib/binance/market";
+import { buildMarketSnapshot, companyTickers, companyToTicker, extractTicker } from "@/lib/binance/market";
 import { getKlines, marketTest, positioningGauge } from "@/lib/binance/market-test";
 import { getQuotes } from "@/lib/binance/market";
 import { sourceClusterKey } from "./grade";
@@ -250,7 +250,10 @@ function fallbackSynthesis(
       const found = /^We found/i.test(rawFound) ? rawFound : `We found ${rawFound}`;
       const foundClean = found.replace(/^We found that We found/i, "We found").replace(/^We found that /i, "We found ");
       const titleSnippet = rawFound.replace(/^We found\s+/i, "").slice(0, 86);
-      const ticker = companyToTicker(m.name) ?? extractTicker(m.name);
+      const ticker =
+        companyTickers(m.name).find((t) => marketByTicker.has(t)) ??
+        companyToTicker(m.name) ??
+        extractTicker(m.name);
       const facts =
         marketByTicker.get(ticker) ??
         marketByTicker.get(m.name) ?? {
@@ -340,7 +343,10 @@ function coerceSynthesis(
           .filter((r) => r && typeof r.company === "string" && typeof r.body === "string")
           .map((r) => {
             const company = r.company;
-            const ticker = companyToTicker(company) ?? extractTicker(company);
+            const ticker =
+              companyTickers(company).find((t) => marketByTicker.has(t)) ??
+              companyToTicker(company) ??
+              extractTicker(company);
             const facts = marketByTicker.get(ticker) ?? marketByTicker.get(company);
             const match = withSources.find(
               (e) => normalizeCompany(e.company) === normalizeCompany(company),
@@ -591,7 +597,10 @@ export async function synthesizeInquiry(inquiryId: string): Promise<void> {  awa
     // fall through with unavailable snapshot
   }
   const compact = withSources.slice(0, 4).map((e, i) => {
-    const ticker = companyToTicker(e.company) ?? extractTicker(e.company);
+    const ticker =
+      companyTickers(e.company).find((t) => marketByTicker.has(t)) ??
+      companyToTicker(e.company) ??
+      extractTicker(e.company);
     return {
       i,
       company: e.company.slice(0, 60),
