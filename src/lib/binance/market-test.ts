@@ -14,7 +14,8 @@ export type Candle = { time: number; open: number; high: number; low: number; cl
 
 export type GaugeLine = { label: string; detail: string };
 
-const REST_BASE = "https://api.binance.com";
+// Same geo-unrestricted mirror as market.ts. Klines are public data.
+const REST_BASE = "https://data-api.binance.vision";
 
 export async function getKlines(symbol: string, limit = 120): Promise<Candle[]> {
   const controller = new AbortController();

@@ -7,7 +7,10 @@
  * set — see `./agent-os.ts`.
  */
 
-const REST_BASE = "https://api.binance.com";
+// data-api.binance.vision is Binance official public-data mirror with no
+// geo restrictions. api.binance.com refuses US IPs, which is where serverless
+// functions run, so every public quote here goes through the mirror.
+const REST_BASE = "https://data-api.binance.vision";
 
 export type Quote = {
   ticker: string;

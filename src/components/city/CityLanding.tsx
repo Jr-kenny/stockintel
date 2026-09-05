@@ -81,7 +81,7 @@ function useTape() {
   useEffect(() => {
     let cancelled = false;
     const symbols = encodeURIComponent(JSON.stringify(WATCH.map(([, sym]) => sym)));
-    fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${symbols}`)
+    fetch(`https://data-api.binance.vision/api/v3/ticker/24hr?symbols=${symbols}`)
       .then((res) => {
         if (!res.ok) throw new Error(`tape ${res.status}`);
         return res.json();
