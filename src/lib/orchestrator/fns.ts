@@ -123,8 +123,17 @@ export type SynthesisView = {
     title: string;
     body: string;
     confidence: number;
+    verdict: string;
+    marketCall: string;
+    timeframe: string;
+    marketLines?: string[];
     sources: SynthesisSource[];
   }[];
+  market?: {
+    at: string;
+    lines: string[];
+    byCompany: Record<string, { symbol: string; price: number; change24hPct: number }>;
+  } | null;
 };
 
 const synthesisSchema = z.object({
@@ -135,10 +144,25 @@ const synthesisSchema = z.object({
       title: z.string(),
       body: z.string(),
       confidence: z.number(),
+      verdict: z.string().optional().default("unclear"),
+      marketCall: z.string().optional().default(""),
+      timeframe: z.string().optional().default(""),
+      marketLines: z.array(z.string()).optional().default([]),
       sources: z.array(z.object({ label: z.string(), url: z.string() })),
     }),
   ),
 });
+
+const marketSchema = z
+  .object({
+    at: z.string(),
+    lines: z.array(z.string()),
+    byCompany: z.record(
+      z.object({ symbol: z.string(), price: z.number(), change24hPct: z.number() }),
+    ),
+  })
+  .nullable()
+  .optional();
 
 export const getInquiry = createServerFn({ method: "POST" })
   .validator((input: unknown) => z.string().min(3).parse(input))
@@ -176,7 +200,12 @@ export const getInquiry = createServerFn({ method: "POST" })
       sourcesClustered: row.sourcesClustered,
       readout: row.readoutJson ? readoutSchema.parse(JSON.parse(row.readoutJson)) : null,
       synthesis: row.synthesisJson
-        ? (synthesisSchema.parse(JSON.parse(row.synthesisJson)) as SynthesisView)
+        ? ({
+            ...(synthesisSchema.parse(JSON.parse(row.synthesisJson)) as SynthesisView),
+            market: row.marketJson
+              ? marketSchema.parse(JSON.parse(row.marketJson))
+              : null,
+          } as SynthesisView)
         : null,
       error: row.error,
       windowSeconds: SOURCING_WINDOW_SECONDS,

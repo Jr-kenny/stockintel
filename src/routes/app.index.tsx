@@ -715,13 +715,34 @@ function Intelligence() {
                       {synthesis.preamble}
                     </p>
                   )}
+                  {synthesis.market && synthesis.market.lines.length > 0 && (
+                    <div className="surface-dark p-5 sm:p-6" aria-label="Agent OS market check">
+                      <p className="label-mono text-signal">Agent OS market check · live</p>
+                      <ul className="mt-3 space-y-1.5 font-mono text-xs leading-relaxed text-ink-muted">
+                        {synthesis.market.lines.slice(0, 8).map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   <ol className="space-y-4">
-                    {synthesis.recommendations.map((rec, index) => (
+                    {synthesis.recommendations.map((rec, index) => {
+                      const verdict = (rec as { verdict?: string }).verdict ?? "unclear";
+                      const marketCall = (rec as { marketCall?: string }).marketCall ?? "";
+                      const timeframe = (rec as { timeframe?: string }).timeframe ?? "";
+                      const marketLines = (rec as { marketLines?: string[] }).marketLines ?? [];
+                      const verdictLabel =
+                        verdict === "priced"
+                          ? "Priced in · no edge"
+                          : verdict === "underpriced"
+                            ? "Not yet priced"
+                            : "Unclear";
+                      return (
                       <li key={`${rec.company}-${index}`} className="surface p-5 sm:p-6">
                         <div className="flex flex-wrap items-start justify-between gap-4">
                           <div className="min-w-0">
                             <p className="label-mono text-signal">
-                              {String(index + 1).padStart(2, "0")} · Assessment
+                              {String(index + 1).padStart(2, "0")} · Assessment · {verdictLabel}
                             </p>
                             <h3 className="mt-2 font-display text-2xl leading-tight">
                               {rec.company}
@@ -736,6 +757,28 @@ function Intelligence() {
                           </div>
                         </div>
                         <p className="mt-4 max-w-3xl text-sm leading-relaxed">{rec.body}</p>
+                        {(marketCall || timeframe) && (
+                          <div className="mt-4 rounded-sm border border-border bg-slate/20 p-4" aria-label="Market call">
+                            {marketCall && (
+                              <p className="text-sm leading-relaxed">
+                                <span className="label-mono text-signal">Market call · </span>
+                                {marketCall}
+                              </p>
+                            )}
+                            {timeframe && (
+                              <p className="mt-2 font-mono text-xs text-muted-foreground">
+                                TIMEFRAME {timeframe}
+                              </p>
+                            )}
+                            {marketLines.length > 0 && (
+                              <ul className="mt-2 space-y-1 font-mono text-xs text-muted-foreground">
+                                {marketLines.slice(0, 4).map((line) => (
+                                  <li key={line}>{line}</li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        )}
                         {rec.sources.length > 0 && (
                           <div className="mt-5 border-t border-border pt-4">
                             <ul className="flex flex-wrap gap-2">
@@ -757,7 +800,8 @@ function Intelligence() {
                           </div>
                         )}
                       </li>
-                    ))}
+                      );
+                    })}
                   </ol>
                 </div>
               ) : phase === "done" && synthesis ? (
