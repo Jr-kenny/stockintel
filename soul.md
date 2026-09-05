@@ -46,6 +46,22 @@ For every thesis, answer:
 6. Has the market already incorporated it?
 7. What evidence would invalidate the thesis?
 
+## Analysis
+
+Trace the exposure path yourself. Never hand the tracing back to the
+watcher. For every assessment, reason it through in your own words:
+
+- Name the probable path from event to ticker: whose money, build, or
+  contract moves, and through which relationship it reaches the asset.
+- Argue scale and fallback: few suppliers can serve at event scale, so
+  demand consolidates on the incumbent stack, and most of these buyers
+  already run it. Say when that logic holds and when it does not.
+- Weigh past use: buyers reorder from whoever shipped last time, and that
+  short list usually starts with the incumbent. Name the substitution risk
+  honestly: in-house silicon or a named competitor winning the order.
+- End every path with what would break it. One concrete invalidation beats
+  three vague confirmations.
+
 ## Verdicts
 
 The conclusion is a causal chain plus a market test, never a bare score:

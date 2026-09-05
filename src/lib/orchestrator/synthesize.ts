@@ -328,6 +328,15 @@ function fallbackSynthesis(
   };
 }
 
+/** Models sometimes return recommendations as a numbered object instead of
+ *  an array ({"1": {...}}). Normalize to an array before coercing. */
+function normalizeRecs(value: unknown): Synthesis["recommendations"] {
+  if (Array.isArray(value)) return value as Synthesis["recommendations"];
+  if (value && typeof value === "object")
+    return Object.values(value) as Synthesis["recommendations"];
+  return [];
+}
+
 /** Runs after grading: writes the thought-through readout onto the inquiry. */
 /** Coerce model output into a Synthesis, re-attaching dropped sources. Throws on unparseable content. */
 function coerceSynthesis(
@@ -354,8 +363,7 @@ function coerceSynthesis(
   }
   const synthesis: Synthesis = {
     preamble: typeof parsed.preamble === "string" ? parsed.preamble : "",
-    recommendations: Array.isArray(parsed.recommendations)
-      ? parsed.recommendations
+    recommendations: normalizeRecs(parsed.recommendations)
           .filter((r) => r && typeof r.company === "string" && typeof r.body === "string")
           .map((r) => {
             const company = r.company;
@@ -403,12 +411,11 @@ function coerceSynthesis(
               marketCall,
               timeframe,
               ...(facts ? { marketLines: facts.lines.slice(0, 5) } : {}),
-              sources: Array.isArray(r.sources)
-                ? r.sources.filter((s) => s && typeof s.url === "string").slice(0, 4)
-                : [],
-            };
-          })
-      : [],
+            sources: Array.isArray(r.sources)
+              ? r.sources.filter((s) => s && typeof s.url === "string").slice(0, 4)
+              : [],
+          };
+          }),
   };
   // Never lose the receipts: if the model dropped sources, re-attach them.
   for (const rec of synthesis.recommendations) {
@@ -481,7 +488,7 @@ function salvagePreamble(content: string): string {
 
 export async function synthesizeInquiry(inquiryId: string): Promise<void> {  await ensureSchema();
   const [inquiry] = await db.select().from(inquiries).where(eq(inquiries.id, inquiryId));
-  if (!inquiry?.readoutJson) return;
+  if (!inquiry || !inquiry.readoutJson) return;
 
   const readout = JSON.parse(inquiry.readoutJson) as ReadoutEntry[];
   const claimRows = await db.select().from(claims).where(eq(claims.inquiryId, inquiryId));
@@ -632,14 +639,17 @@ export async function synthesizeInquiry(inquiryId: string): Promise<void> {  awa
   let lastError = "router not attempted";
   let wroteThesis = false;
   // Short contract: long prompts make small/free models return empty.
-  // Details (source re-attach, missing-field fill) stay in code.
+  // Judgment lives in soul.md, read on every attempt below. Details
+  // (source re-attach, missing-field fill) stay in code.
   // Key names are repeated because models invent their own shape otherwise.
-  const leanSystem = `Return ONLY one JSON object with EXACTLY these top-level keys: preamble, recommendations. No other keys. No markdown. No prose.
+  const CONTRACT = `Return ONLY one JSON object with EXACTLY these top-level keys: preamble, recommendations. No other keys. No markdown. No prose.
 recommendations is an array of 1-4 objects with EXACTLY these keys: company, title, body, confidence, verdict, marketCall, timeframe, sources.
 verdict is one of: underpriced, priced, unclear. marketCall is one sentence with price numbers. timeframe is like "1 to 4 weeks".
-Body is 3 short sentences: what we found, the exposure path into the watched ticker, take plus invalidation. Plain warm spoken words, no buy/sell language.
-Example: {"preamble":"...","recommendations":[{"company":"NVIDIA","title":"...","body":"...","confidence":82,"verdict":"underpriced","marketCall":"...","timeframe":"1 to 4 weeks","sources":[{"label":"...","url":"..."}]}]}
-Doctrine: thesis first, price last. Facts separate from inference.`;
+Body is 3 short sentences: what we found, the exposure path into the watched ticker traced in your own words with the scale argument, take plus what would break it. Plain warm spoken words, no buy/sell language.
+Example: {"preamble":"...","recommendations":[{"company":"NVIDIA","title":"...","body":"...","confidence":82,"verdict":"underpriced","marketCall":"...","timeframe":"1 to 4 weeks","sources":[{"label":"...","url":"..."}]}]}`;
+  // The orchestrator reads soul.md on every thesis attempt, grading and
+  // synthesis alike. The contract above fixes the shape, soul fixes the thinking.
+  const thesisSystem = await guidedSystem(CONTRACT);
   type ThesisCall = (opts: {
     system: string;
     user: string;
@@ -666,10 +676,11 @@ Doctrine: thesis first, price last. Facts separate from inference.`;
     call: ThesisCall,
     label: string,
     temperature: number,
+    system: string,
   ): Promise<boolean> {
     try {
       const result = await call({
-        system: leanSystem,
+        system,
         user: userPrompt,
         maxTokens: 1200,
         temperature,
@@ -719,21 +730,21 @@ Doctrine: thesis first, price last. Facts separate from inference.`;
   if (openRouter.live) {
     for (let attempt = 0; attempt < 2 && !wroteThesis; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, 3000));
-      wroteThesis = await attemptThesis(chatJsonOpenRouter, "openrouter", attempt === 0 ? 0.3 : 0.6);
+      wroteThesis = await attemptThesis(chatJsonOpenRouter, "openrouter", attempt === 0 ? 0.3 : 0.6, thesisSystem);
     }
     if (!wroteThesis) console.error("OpenRouter thesis failed, trying 0G:", lastError);
   }
   if (!wroteThesis && router.live) {
     for (let attempt = 0; attempt < 2 && !wroteThesis; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, 4000));
-      wroteThesis = await attemptThesis(chatJson, "0G", attempt === 0 ? 0.3 : 0.6);
+      wroteThesis = await attemptThesis(chatJson, "0G", attempt === 0 ? 0.3 : 0.6, thesisSystem);
     }
     if (!wroteThesis) console.error("0G thesis failed, trying Zen:", lastError);
   }
   if (!wroteThesis && zen.live) {
     for (let attempt = 0; attempt < 2 && !wroteThesis; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, 3000));
-      wroteThesis = await attemptThesis(chatJsonZen, "zen", attempt === 0 ? 0.3 : 0.6);
+      wroteThesis = await attemptThesis(chatJsonZen, "zen", attempt === 0 ? 0.3 : 0.6, thesisSystem);
     }
     if (!wroteThesis) console.error("Zen thesis failed:", lastError);
   }
