@@ -2,9 +2,15 @@
  * Binance Agent OS MCP client — the real Agent OS path for Track A.
  *
  * Endpoint: https://agent.binance.com/mcp/agentic (Streamable HTTP).
- * Auth: OAuth user token (RFC 8707 protected resource). The handshake 401s
- * without one, so this client is live only when BINANCE_MCP_TOKEN is set.
- * Get it by connecting at agent.binance.com and authorizing StockIntel:
+ * Auth: OAuth user authorization completed inside an MCP-compatible client
+ * (Claude Code, Cursor, Claude Desktop): add the server URL there,
+ * Authenticate in the browser, pick the agent, grant scopes. There is no
+ * static token to paste and no web page at that URL.
+ * Server-side calls use BINANCE_MCP_TOKEN when a user token exists, e.g.
+ * from the client auth flow above. Connect from an MCP client
+ * (Claude Code: claude mcp add binance-mcp-server --transport http
+ * https://agent.binance.com/mcp/agentic, then /mcp Authenticate),
+ * market data needs no special scope, balances and positions need the
  * market data needs no special scope, balances and positions need the
  * read-only account scope on your Agentic sub-account. No withdrawals,
  * ever — the app never requests trade or transfer scopes.
