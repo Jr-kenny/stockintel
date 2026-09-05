@@ -26,13 +26,17 @@
 .city-hero {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 26rem) minmax(0, 1fr);
-  gap: 2rem;
-  max-width: 76rem;
+  grid-template-columns: minmax(0, 25rem) minmax(0, 1fr);
+  gap: 1rem;
+  max-width: 80rem;
   margin: 0 auto;
   padding: 3.5rem clamp(1.25rem, 4vw, 3rem) 4.5rem;
   align-items: center;
+  overflow: clip;
 }
+
+.city-copy { position: relative; z-index: 2; }
+.city-stage { z-index: 1; }
 
 .city-eyebrow { opacity: .65; }
 .city-copy h1 {

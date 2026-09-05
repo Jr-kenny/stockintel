@@ -114,8 +114,9 @@ function useDayNight(paused: boolean) {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reduce || paused) return;
     let raf = 0;
-    const start = performance.now();
-    const DAY_MS = 120_000;
+    // Start at midday so the city opens in full daylight, then drifts slowly.
+    const DAY_MS = 240_000;
+    const start = performance.now() - 0.45 * DAY_MS;
     const tick = (now: number) => {
       const t = ((now - start) % DAY_MS) / DAY_MS;
       const night = t < 0.2 || t > 0.83 ? 0.9 : t < 0.32 || t > 0.7 ? 0.35 : 0;
@@ -135,7 +136,7 @@ function useFitScale() {
     const el = stageRef.current;
     if (!el) return;
     const fit = () => {
-      const s = Math.min(1.15, el.clientWidth / 560);
+      const s = Math.min(1.0, el.clientWidth / 620);
       setScale(Math.max(0.45, s));
     };
     fit();
