@@ -110,7 +110,7 @@ function normalizeCompany(name: string): string {
 }
 
 /** Deterministic market verdict from real gauge numbers. No guessing. */
-export function marketVerdict(facts: MarketFacts, confidence: number): {
+export function marketVerdict(facts: MarketFacts, confidence: number, independentSources = 0): {
   verdict: string;
   marketCall: string;
   timeframe: string;
@@ -157,7 +157,10 @@ export function marketVerdict(facts: MarketFacts, confidence: number): {
   }
   return {
     verdict: "unclear",
-    marketCall: `${facts.symbol} at ${price}. The chain needs a second source before a priced-in call is honest.`,
+    marketCall:
+      independentSources >= 2
+        ? `${facts.symbol} at ${price}. Evidence is real but the price already reflects part of it, so no clean edge yet.`
+        : `${facts.symbol} at ${price}. The chain needs a second source before a priced-in call is honest.`,
     timeframe: "unclear, needs confirmation",
   };
 }
@@ -170,7 +173,7 @@ function fallbackSynthesis(
 ): Synthesis {
   const merged = new Map<
     string,
-    { name: string; confidence: number; sources: SynthesisSource[]; claim: string }
+    { name: string; confidence: number; sources: SynthesisSource[]; claim: string; independentSources: number }
   >();
   for (const e of entries) {
     // Belt and braces: headlines never become assessments, even from old rows.
@@ -187,6 +190,7 @@ function fallbackSynthesis(
     const existing = merged.get(key);
     if (existing) {
       existing.confidence = Math.max(existing.confidence, e.confidence);
+      existing.independentSources = Math.max(existing.independentSources, e.independentSources ?? 0);
       for (const s of e.sources) {
         if (!existing.sources.some((x) => x.url === s.url)) existing.sources.push(s);
       }
@@ -196,6 +200,7 @@ function fallbackSynthesis(
         confidence: e.confidence,
         sources: [...e.sources],
         claim: e.topClaim,
+        independentSources: e.independentSources ?? 0,
       });
     }
   }
@@ -229,7 +234,7 @@ function fallbackSynthesis(
           compressed: false,
           lines: [],
         };
-      const call = marketVerdict(facts, m.confidence);
+      const call = marketVerdict(facts, m.confidence, m.independentSources);
       const suggests =
         call.verdict === "priced"
           ? `The chain is real, but the market has moved. That matters for ${watchPhrase} because chasing it now means paying for news.`
@@ -306,7 +311,7 @@ function coerceSynthesis(
                   ? Math.round(entryConf)
                   : 60;
             const fallbackCall = facts
-              ? marketVerdict(facts, confidence)
+              ? marketVerdict(facts, confidence, match?.independentSources ?? 0)
               : { verdict: "unclear", marketCall: "No market snapshot available.", timeframe: "unclear, needs confirmation" };
             const verdict =
               typeof (r as { verdict?: unknown }).verdict === "string" &&
