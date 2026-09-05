@@ -34,7 +34,7 @@ const wallet =
 
 /** Title-level verbs/phrases that indicate a company's situation is CHANGING. */
 const SIGNAL_RE =
-  /\b(expansion|expand[s]?|opens?|opening|inaugurat\w*|commission\w*|groundbreak\w*|breaks ground|broke ground|construction|to build|building|set to open|new (hotel|factory|plant|facility|store|branch|warehouse|terminal|refinery|mill)|flagship|launch(es|ed)?|unveil\w*|acquir(es|ed)?|acquisition|merger|invest(s|ed|ment)?|funding|raise[sd]?|refurbish\w*|renovat\w*|fit-out|fitout|guidance|forecast|downgrade|upgrade|buyback|dividend|split|contract|partnership|approval|clearance|filing|probe|lawsuit|breach|outage|recall|shortage|backlog|capex|tariff|sanction)\b/i;
+  /\b(expansion|expand[s]?|opens?|opening|inaugurat\w*|commission\w*|groundbreak\w*|breaks ground|broke ground|construction|to build|building|set to open|new (factory|plant|facility|fab|datacenter|store|branch|warehouse|terminal|refinery|mill)|flagship|launch(es|ed)?|unveil\w*|acquir(es|ed)?|acquisition|merger|invest(s|ed|ment)?|funding|raise[sd]?|refurbish\w*|renovat\w*|guidance|forecast|downgrade|upgrade|buyback|dividend|split|contract|partnership|approval|clearance|filing|probe|lawsuit|breach|outage|recall|shortage|backlog|capex|tariff|sanction)\b/i;
 
 const STOPWORDS = new Set(
   (
@@ -106,7 +106,7 @@ type ResearchCommand = {
 
 function buildQueries(cmd: ResearchCommand): string[] {
   // Hypotheses-aware: use the orchestrator's search hints first — they already encode
-  // inventory→demand reasoning (new sites, expansion, projects), not just keywords.
+  // exposure-chain reasoning (events, counterparties, filings), not just keywords.
   if (cmd.hypotheses?.length) {
     const hints = cmd.hypotheses.flatMap((h) => h.searchHints ?? []).filter(Boolean).slice(0, 6);
     if (hints.length >= 2) {
@@ -129,7 +129,7 @@ function buildQueries(cmd: ResearchCommand): string[] {
   const queries: string[] = [];
   if (topic && geo) queries.push(`${topic} ${geo}`);
   if (topic && !geo) queries.push(topic);
-  if (geo) queries.push(`${geo} (new hotel OR factory OR plant OR warehouse OR headquarters)`);
+  if (geo) queries.push(`${geo} (new factory OR datacenter OR plant OR warehouse OR headquarters)`);
   return Array.from(new Set(queries)).slice(0, 2);
 }
 
@@ -334,7 +334,7 @@ function scoreSignal(signal: RawSignal): number {
   // Concrete capacity or money mentioned -> stronger signal.
   if (
     /\$\s?[\d,.]+/.test(t) ||
-    /\b\d{3,}\s*(rooms|beds|sqm|hectares|units|containers|tonnes)\b/i.test(t)
+    /\b\d{3,}\s*(units|containers|tonnes|wafers|MW|GW)\b/i.test(t)
   ) {
     confidence += 0.12;
   }
@@ -350,10 +350,10 @@ function scoreSignal(signal: RawSignal): number {
 /**
  * Topic relevance gate — hypothesis-aware.
  * When the orchestrator supplied hypotheses, a signal is relevant if it
- * matches EITHER the buyer topic OR any hypothesis signal vocabulary
+ * matches EITHER the watched ticker topic OR any hypothesis signal vocabulary
  * (expansion/construction/tender etc.). This keeps the filter honest for
- * generic B2B: a new plant still matters to a packaging supplier even when
- * the headline never says "packaging".
+ * indirect exposure: a counterparty buildout still matters to the ticker even when
+ * the headline never names it.
  */
 function isRelevant(title: string, topicWords: string[], hypotheses?: { signals?: string[] }[]): boolean {
   const lower = title.toLowerCase();
@@ -458,9 +458,8 @@ function toClaims(signals: RawSignal[], cmd: ResearchCommand): Claim[] {
       if (tick?.[1]) return tick[1].toUpperCase();
       const cat = (cmd.scope.category ?? "").trim();
       if (cat.length > 8) return cat.length > 64 ? cat.slice(0, 61).replace(/\s+\S*$/, "") + "..." : cat;
-      const q = cmd.question;
-      const m = q.match(/We (?:have|supply|took in|sell|offer|stock)[^—–.]{0,70}/i);
-      if (m) return m[0].replace(/^We /i, "your ").slice(0, 64);
+      const q = cmd.question.replace(/\s+/g, " ").trim();
+      if (q.length > 8 && q.length <= 64) return q;
       // fallback: don't dump raw question truncated
       return "the watched ticker";
     })();
@@ -471,7 +470,7 @@ function toClaims(signals: RawSignal[], cmd: ResearchCommand): Claim[] {
     })();
     const date = bucket.best.publishedAt;
     const titleSnippet = bucket.best.title.replace(/\s+-\s+[^-]+$/, "").slice(0, 72).replace(/"/g, "'");
-    const verbType: "invest" | "build" | "open" | "expand" = /invest|funding|raise|acquir|merger/i.test(verb) ? "invest" : /construction|build|groundbreak|refurbish|renovat|fit-out|fitout/i.test(verb) ? "build" : /open|inaugurat|commission|launch|unveil|flagship/i.test(verb) ? "open" : "expand";
+    const verbType: "invest" | "build" | "open" | "expand" = /invest|funding|raise|acquir|merger/i.test(verb) ? "invest" : /construction|build|groundbreak|refurbish|renovat/i.test(verb) ? "build" : /open|inaugurat|commission|launch|unveil|flagship/i.test(verb) ? "open" : "expand";
     const whyByType: Record<string, string> = {
       invest: `We found ${bucket.name} shows ${verb}, reported via ${sourceSite} on ${date}. Capital moves like this travel down the exposure chain. Worth checking whether ${watchPhrase} sits downstream and if the market has reacted.`,
       build: `${bucket.name}: ${verb} flagged via ${sourceSite} on ${date}, "${titleSnippet}". Builds at this stage create exposure for suppliers and infrastructure names. Worth confirming scale and timing to impact.`,

@@ -649,6 +649,24 @@ export async function gradeAndSynthesize(inquiryId: string) {
       byCompany.get(g.company)!.push(g);
     }
 
+    // Headlines are not companies. Agents sometimes promote a headline
+    // fragment to the company slot ("From Crude to Compute", "Sponsored
+    // Content", "If the GCC aims..."). Those entries never reach the readout:
+    // a real company name is short and never starts with a preposition,
+    // conjunction, or sponsored tag.
+    for (const name of Array.from(byCompany.keys())) {
+      const words = name.trim().split(/\s+/);
+      if (
+        /sponsored/i.test(name) ||
+        words.length > 5 ||
+        /^(from|if|to|as|at|on|in|with|after|before|during|while|when|where|how|why|what|and|but|or|for|by|of|the|a|an)\b/i.test(
+          name.trim(),
+        )
+      ) {
+        byCompany.delete(name);
+      }
+    }
+
     const readout = Array.from(byCompany.entries())
       .map(([company, list]) => {
         const totalWeight = list.reduce((sum, c) => sum + c.weight, 0);

@@ -173,6 +173,16 @@ function fallbackSynthesis(
     { name: string; confidence: number; sources: SynthesisSource[]; claim: string }
   >();
   for (const e of entries) {
+    // Belt and braces: headlines never become assessments, even from old rows.
+    const w = e.company.trim().split(/\s+/);
+    if (
+      /sponsored/i.test(e.company) ||
+      w.length > 5 ||
+      /^(from|if|to|as|at|on|in|with|after|before|during|while|when|where|how|why|what|and|but|or|for|by|of|the|a|an)\b/i.test(
+        e.company.trim(),
+      )
+    )
+      continue;
     const key = normalizeCompany(e.company) || e.company.toLowerCase();
     const existing = merged.get(key);
     if (existing) {

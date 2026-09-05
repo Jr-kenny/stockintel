@@ -107,7 +107,7 @@ async function fetchTranscript(videoId: string): Promise<string | null> {
   return null;
 }
 
-// Blocklist for YouTube titles — channels, people, generic labels that are not buyers
+// Blocklist for YouTube titles — channels, people, generic labels that are not companies
 const YT_STOP = new Set("gov governor whitmer pritzker wdrb wave forbes breaking moes natureworks illinois grand opening ceremony cornerstone tour video project construction building new update report announcement live".toLowerCase().split(" "));
 function extractCompany(title: string): string | null {
   const m = title.match(/\b([A-Z][A-Za-z&.'-]+(?:\s+[A-Z][A-Za-z&.'-]+){0,2})\b/);
@@ -158,7 +158,7 @@ async function researchAndSubmit(cmd: ResearchCommand): Promise<void> {
     // Prefer title-extracted company; fall back to channel only if it looks like a company, never Unknown Developer
     let company: string | null = extractCompany(v.title);
     if (!company && v.channel) {
-      // channel often is a media outlet, not a buyer — only trust if it passes company check
+      // channel often is a media outlet, not a company — only trust if it passes company check
       const ch = extractCompany(v.channel);
       // also reject obvious outlet names (WDRB, Forbes, etc consolidated in extractCompany already)
       if (ch && !/^(WDRB|WAVE|Forbes|Breaking|News|Mo.?es|Smart|NatureWorks)$/i.test(ch)) company = ch;
@@ -167,7 +167,7 @@ async function researchAndSubmit(cmd: ResearchCommand): Promise<void> {
     const observed = v.publishedAt;
 
     // Project info — require transcript/description to mention concrete work
-    const hasProject = /hotel|estate|mall|hospital|plant|factory|building|development|construction|facility|warehouse|terminal|refinery|mill|store|branch/i.test(content);
+    const hasProject = /hotel|estate|mall|hospital|plant|factory|fab|datacenter|building|development|construction|facility|warehouse|terminal|refinery|mill|store|branch/i.test(content);
     if (!hasProject) continue;
 
     const item = transcript
@@ -179,8 +179,8 @@ async function researchAndSubmit(cmd: ResearchCommand): Promise<void> {
       if (tick?.[1]) return tick[1].toUpperCase();
       const cat = (cmd.scope.category ?? "").trim();
       if (cat.length > 8) return cat.length > 60 ? cat.slice(0,57).replace(/\s+\S*$/, "")+"..." : cat;
-      const m = cmd.question.match(/We (?:have|supply|took in|sell|offer|stock)[^—–.]{0,70}/i);
-      if (m) return m[0].replace(/^We /i, "your ").slice(0, 60);
+      const q = cmd.question.replace(/\s+/g, " ").trim();
+      if (q.length > 8 && q.length <= 60) return q;
       return "the watched ticker";
     })();
     const transcriptHint = transcript ? "transcript confirms active work" : "description points to active work";
