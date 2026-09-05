@@ -167,7 +167,7 @@ async function researchAndSubmit(cmd: ResearchCommand): Promise<void> {
     const observed = v.publishedAt;
 
     // Project info — require transcript/description to mention concrete work
-    const hasProject = /hotel|estate|mall|hospital|plant|factory|fab|datacenter|building|development|construction|facility|warehouse|terminal|refinery|mill|store|branch/i.test(content);
+    const hasProject = /hotel|estate|mall|hospital|plant|factory|building|development|construction|facility|warehouse|terminal|refinery|mill|store|branch/i.test(content);
     if (!hasProject) continue;
 
     const item = transcript

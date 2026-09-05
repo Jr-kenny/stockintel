@@ -1,6 +1,7 @@
 # Memory
 
-## 2026-09-05 — Launch fixes
-- Thesis writer was failing on empty, fenced, truncated router output. Root cause was chatJson throwing before coerce could salvage. Fixed by trimming payload to top 6 companies, 600 char claims, 3 sources, 60s timeout, 2200 max tokens, plus salvage of rawContent on throw. Fallback now carries verdicts and exposure chain voice so it reads as thesis, not grouped clusters.
-- City HTML was reference only but routed as static `/city/index.html`. Built real React landing at `/` as `src/components/city/CityLanding.tsx` plus `city.css`. Buildings lift on hover and focus with thesis, tape reads live Binance with fallback, respects reduced motion. Fixed SiteNav brand Runintel to StockIntel.
-- Build passes with `bun run build`.
+## 2026-09-05 — RunIntel residue scrub
+- User showed production readout with demand-side sales voice ("need what you're moving", "orders already placed", "who owns purchasing") and headlines as company names. Those exact strings exist nowhere in the working tree. Production runs a pre-session build. All 5 local commits are unpushed (no remote configured), so nothing fixed locally is live.
+- Scrubbed all 10 agents: signal vocabulary (hotel/fit-out out, fab/datacenter in), geo fallback query, buyer-topic comments, supply-inventory watchPhrase branch, capacity bonus units. youtube agent buyer comments fixed too.
+- Headline guard at readout build in run.ts plus fallback merge in synthesize.ts: sponsored, over 5 words, or leading preposition/conjunction names never become assessments.
+- hypothesis.ts was already equity voiced, left alone. Build passes. Committed as 25b5475. Still needs push plus Vercel deploy to change production.

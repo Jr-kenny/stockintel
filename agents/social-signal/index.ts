@@ -34,7 +34,7 @@ const wallet =
 
 /** Title-level verbs/phrases that indicate a company's situation is CHANGING. */
 const SIGNAL_RE =
-  /\b(expansion|expand[s]?|opens?|opening|inaugurat\w*|commission\w*|groundbreak\w*|breaks ground|broke ground|construction|to build|building|set to open|new (factory|plant|facility|fab|datacenter|store|branch|warehouse|terminal|refinery|mill)|flagship|launch(es|ed)?|unveil\w*|acquir(es|ed)?|acquisition|merger|invest(s|ed|ment)?|funding|raise[sd]?|refurbish\w*|renovat\w*|guidance|forecast|downgrade|upgrade|buyback|dividend|split|contract|partnership|approval|clearance|filing|probe|lawsuit|breach|outage|recall|shortage|backlog|capex|tariff|sanction)\b/i;
+  /\b(expansion|expand[s]?|opens?|opening|inaugurat\w*|commission\w*|groundbreak\w*|breaks ground|broke ground|construction|to build|building|set to open|flagship|launch(es|ed)?|unveil\w*|acquir(es|ed)?|acquisition|merger|invest(s|ed|ment)?|funding|raise[sd]?|refurbish\w*|renovat\w*|guidance|forecast|downgrade|upgrade|buyback|dividend|split|contract|partnership|approval|clearance|filing|probe|lawsuit|breach|outage|recall|shortage|backlog|capex|tariff|sanction)\b/i;
 
 const STOPWORDS = new Set(
   (
@@ -129,7 +129,7 @@ function buildQueries(cmd: ResearchCommand): string[] {
   const queries: string[] = [];
   if (topic && geo) queries.push(`${topic} ${geo}`);
   if (topic && !geo) queries.push(topic);
-  if (geo) queries.push(`${geo} (new factory OR datacenter OR plant OR warehouse OR headquarters)`);
+  if (queries.length === 0 && geo) queries.push(geo);
   return Array.from(new Set(queries)).slice(0, 2);
 }
 
@@ -334,7 +334,7 @@ function scoreSignal(signal: RawSignal): number {
   // Concrete capacity or money mentioned -> stronger signal.
   if (
     /\$\s?[\d,.]+/.test(t) ||
-    /\b\d{3,}\s*(units|containers|tonnes|wafers|MW|GW)\b/i.test(t)
+    /\b\d{3,}\s*(billion|million|thousand)\b/i.test(t)
   ) {
     confidence += 0.12;
   }
