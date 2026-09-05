@@ -231,9 +231,47 @@ function fallbackSynthesis(
     if (first.length > 12 && first.length < 70) return first.slice(0, 64);
     return "the watched ticker";
   })();
+  const watchTicker = (() => {
+    const tick = question.match(/watch(?:ing)?\s+([A-Za-z]{1,6})\b/i);
+    return (tick?.[1] ?? watchPhrase).toUpperCase().slice(0, 6);
+  })();
+  // Deterministic exposure analysis: trace the path ourselves instead of
+  // asking the watcher to. Link flavor follows the claim type, the fallback
+  // argument follows scale and installed base, and every path names what
+  // would break it.
+  function exposurePath(
+    claim: string,
+    ticker: string,
+  ): { link: string; invalidate: string } {
+    const c = claim.toLowerCase();
+    if (/capex|guidance|budget|spending|invest|funding|raise|\bbillion\b|\bmillion\b/.test(c))
+      return {
+        link: `Money at this scale turns into purchase orders, and purchase orders in this segment flow toward ${ticker} hardware.`,
+        invalidate: `This breaks if the spend lands on in-house silicon or a named competitor instead.`,
+      };
+    if (/contract|deal|award|partnership|supplier|order|win|wins|won/.test(c))
+      return {
+        link: `Contracts decide who gets paid first. The read is whether ${ticker} or its partners sit anywhere in this order chain.`,
+        invalidate: `This breaks if the order book bypasses ${ticker} entirely.`,
+      };
+    if (/build|expand|expansion|construction|plant|fab|data center|datacenter|facility|capacity/.test(c))
+      return {
+        link: `Buildouts at this scale need compute to fill them, and buyers fall back to ${ticker} when capacity has to ship on time.`,
+        invalidate: `This breaks if the build stalls or fills with rival silicon.`,
+      };
+    if (/filing|regulator|approval|rule|tariff|sanction|probe|lawsuit|ban|restrict/.test(c))
+      return {
+        link: `Filings and rulings set what buyers are allowed to plan around, and the read-through into ${ticker} is demand visibility, up or down.`,
+        invalidate: `This breaks if the final text lands softer than the headline.`,
+      };
+    return {
+      link: `Events like this travel through customers and suppliers before they reach ${ticker}, so the move tends to show up there first.`,
+      invalidate: `This breaks if no credible link into ${ticker} surfaces.`,
+    };
+  }
   const recs = Array.from(merged.values())
     .sort((a, b) => b.confidence - a.confidence)
-    .map((m) => {
+    .map((m, idx) => {
       const sourceSite = m.sources[0]?.label ?? "a source";
       const rawFound = m.claim.trim();
       const found = /^We found/i.test(rawFound) ? rawFound : `We found ${rawFound}`;
@@ -254,13 +292,18 @@ function fallbackSynthesis(
           lines: [],
         };
       const call = marketVerdict(facts, m.confidence, m.independentSources);
-      const suggests =
+      const path = exposurePath(rawFound, watchTicker);
+      const scale =
+        idx % 2 === 0
+          ? `Few suppliers can serve at this scale, so demand consolidates on the incumbent stack, and most of these buyers already run ${watchTicker}.`
+          : `At this scale buyers reorder from whoever can ship, and that short list still starts with ${watchTicker}.`;
+      const analysis =
         call.verdict === "priced"
-          ? `The chain is real, but the market has moved. That matters for ${watchPhrase} because chasing it now means paying for news.`
+          ? `${path.link} The chain is real, but the market moved first, so chasing it now means paying for news.`
           : call.verdict === "underpriced"
-            ? `Capital moves like this travel down the exposure chain toward ${watchPhrase}. The question now is timing to impact.`
-            : `Worth tracing the impact path into ${watchPhrase} before treating this as edge. The link needs confirming.`;
-      const body = `${foundClean} — reported via ${sourceSite}. ${suggests} Market check: ${call.marketCall} Timeframe: ${call.timeframe}.`;
+            ? `${path.link} ${scale}`
+            : `${path.link} Before treating this as edge, confirm the one thing that would break it. ${path.invalidate}`;
+      const body = `${foundClean} — reported via ${sourceSite}. ${analysis} Market check: ${call.marketCall} Timeframe: ${call.timeframe}.`;
       return {
         company: m.name,
         title: titleSnippet.slice(0, 90),

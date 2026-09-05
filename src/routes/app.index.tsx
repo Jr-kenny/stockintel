@@ -135,8 +135,9 @@ function SourcingCountdown({
         <>
           <p className="mt-2 font-mono text-lg text-ink">grading…</p>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            The window is closed. {claims} claims from {sources} source clusters are being
-            graded and synthesized into your readout.
+            {claims === 0
+              ? "The window just closed and the first claims are still landing. Grading starts the moment they do."
+              : `The window is closed. ${claims} claims from ${sources} source clusters are being graded and synthesized into your readout.`}
           </p>
         </>
       ) : (
