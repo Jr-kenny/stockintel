@@ -652,19 +652,39 @@ export async function gradeAndSynthesize(inquiryId: string) {
     // Headlines are not companies. Agents sometimes promote a headline
     // fragment to the company slot ("From Crude to Compute", "Sponsored
     // Content", "If the GCC aims..."). Those entries never reach the readout:
-    // a real company name is short and never starts with a preposition,
+    // a real company name is short, has no headline verbs, is not made
+    // entirely of generic sector words, and never starts with a preposition,
     // conjunction, or sponsored tag.
-    for (const name of Array.from(byCompany.keys())) {
-      const words = name.trim().split(/\s+/);
+    const HEADLINE_VERBS = new Set(
+      "analyzing launches launched launch doubles doubled doubles raises raised raise cuts cut beats beat misses missed warns warned unveils unveiled posts posted reports reported says said plans planned wins won faces faced".split(
+        " ",
+      ),
+    );
+    const GENERIC_BIZ = new Set(
+      "ai tech big great new global top capex spending server servers spend spends market markets stock stocks data center cloud chip chips silicon semiconductor semiconductors industry sectors sector business businesses group power energy article news update report foregoing".split(
+        " ",
+      ),
+    );
+    const isHeadlineName = (name: string): boolean => {
+      const clean = name.trim();
+      if (/sponsored/i.test(clean)) return true;
+      const words = clean.split(/\s+/);
+      if (words.length > 5) return true;
       if (
-        /sponsored/i.test(name) ||
-        words.length > 5 ||
         /^(from|if|to|as|at|on|in|with|after|before|during|while|when|where|how|why|what|and|but|or|for|by|of|the|a|an)\b/i.test(
-          name.trim(),
+          clean,
         )
-      ) {
-        byCompany.delete(name);
-      }
+      )
+        return true;
+      const tailPossessive = /\u2019s$|'s$/i.test(words[words.length - 1] ?? "");
+      if (words.length > 1 && tailPossessive) return true;
+      const tokens = words.map((t) => t.toLowerCase().replace(/[^a-z]/g, ""));
+      if (tokens.some((t) => HEADLINE_VERBS.has(t))) return true;
+      if (tokens.length > 0 && tokens.every((t) => GENERIC_BIZ.has(t))) return true;
+      return false;
+    };
+    for (const name of Array.from(byCompany.keys())) {
+      if (isHeadlineName(name)) byCompany.delete(name);
     }
 
     const readout = Array.from(byCompany.entries())
