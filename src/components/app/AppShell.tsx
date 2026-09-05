@@ -137,9 +137,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="app-shell">
       <aside className="app-rail">
         <div>
-          <a href="/city/index.html" className="app-rail-brand" aria-label="StockIntel: back to the city">
+          <Link to="/" className="app-rail-brand" aria-label="StockIntel: back to the city">
             <Brand />
-          </a>
+          </Link>
           <div className="app-rail-rule" />
           <NavList />
         </div>
@@ -151,9 +151,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="app-main-column">
         <header className="app-mobile-header">
-          <a href="/city/index.html" aria-label="StockIntel: back to the city">
+          <Link to="/" aria-label="StockIntel: back to the city">
             <Brand compact />
-          </a>
+          </Link>
           <button
             type="button"
             className="app-menu-button"
