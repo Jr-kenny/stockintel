@@ -124,10 +124,27 @@ export function marketVerdict(facts: MarketFacts, confidence: number): {
   }
   const pct24 = facts.change24hPct ?? 0;
   const price = `$${facts.price.toFixed(2)} (${pct24 >= 0 ? "+" : ""}${pct24.toFixed(2)}% 24h)`;
+  const run = facts.run14 ?? 0;
+  const range = facts.rangePos ?? 50;
   if (facts.stretched) {
     return {
       verdict: "priced",
       marketCall: `${facts.symbol} at ${price}, upper quintile after a sharp run. The move looks priced, no edge right now.`,
+      timeframe: "unclear, needs confirmation",
+    };
+  }
+  if (confidence >= 70 && (range < 80 || (Math.abs(run) < 5 && Math.abs(pct24) < 2))) {
+    const rangeTxt = facts.rangePos !== null ? `, ${facts.rangePos.toFixed(0)}% of range` : "";
+    return {
+      verdict: "underpriced",
+      marketCall: `${facts.symbol} at ${price}${rangeTxt}. The event is fresh and the move is not yet in the price.`,
+      timeframe: Math.abs(run) > 10 ? "days to weeks" : "1 to 4 weeks",
+    };
+  }
+  if (range >= 80) {
+    return {
+      verdict: "unclear",
+      marketCall: `${facts.symbol} at ${price}, near the top of its range. The chain is real but the bar for surprise is high after this run.`,
       timeframe: "unclear, needs confirmation",
     };
   }
@@ -136,14 +153,6 @@ export function marketVerdict(facts: MarketFacts, confidence: number): {
       verdict: "unclear",
       marketCall: `${facts.symbol} at ${price}, lower quintile after a drawdown. Weak chain, so no call yet.`,
       timeframe: "unclear, needs confirmation",
-    };
-  }
-  if (confidence >= 70 && (facts.rangePos === null || facts.rangePos < 80)) {
-    const range = facts.rangePos !== null ? `, ${facts.rangePos.toFixed(0)}% of range` : "";
-    return {
-      verdict: "underpriced",
-      marketCall: `${facts.symbol} at ${price}${range}. The event is fresh and the move is not yet in the price.`,
-      timeframe: facts.run14 !== null && Math.abs(facts.run14) > 10 ? "days to weeks" : "1 to 4 weeks",
     };
   }
   return {
@@ -273,9 +282,19 @@ function coerceSynthesis(
           .filter((r) => r && typeof r.company === "string" && typeof r.body === "string")
           .map((r) => {
             const company = r.company;
-            const confidence = Number.isFinite(r.confidence) ? Math.round(r.confidence) : 60;
             const ticker = companyToTicker(company) ?? extractTicker(company);
             const facts = marketByTicker.get(ticker) ?? marketByTicker.get(company);
+            const match = withSources.find(
+              (e) => normalizeCompany(e.company) === normalizeCompany(company),
+            );
+            const entryConf = match?.confidence;
+            const rawConf = Number.isFinite(r.confidence) ? Math.round(r.confidence) : NaN;
+            const confidence =
+              Number.isFinite(rawConf) && (rawConf as number) >= 10 && (rawConf as number) <= 100
+                ? (rawConf as number)
+                : typeof entryConf === "number"
+                  ? Math.round(entryConf)
+                  : 60;
             const fallbackCall = facts
               ? marketVerdict(facts, confidence)
               : { verdict: "unclear", marketCall: "No market snapshot available.", timeframe: "unclear, needs confirmation" };
@@ -284,10 +303,14 @@ function coerceSynthesis(
               ["underpriced", "priced", "unclear"].includes((r as { verdict: string }).verdict)
                 ? (r as { verdict: string }).verdict
                 : fallbackCall.verdict;
-            const marketCall =
-              typeof (r as { marketCall?: unknown }).marketCall === "string" &&
-              ((r as { marketCall: string }).marketCall?.length ?? 0) > 10
+            const rawCall =
+              typeof (r as { marketCall?: unknown }).marketCall === "string"
                 ? (r as { marketCall: string }).marketCall
+                : "";
+            // Never ship buy/sell orders as the market call.
+            const marketCall =
+              rawCall.length > 10 && !/^(buy|sell|long|short)\b/i.test(rawCall.trim())
+                ? rawCall
                 : fallbackCall.marketCall;
             const timeframe =
               typeof (r as { timeframe?: unknown }).timeframe === "string" &&
@@ -325,8 +348,10 @@ function coerceSynthesis(
 /** Pull complete recommendation objects out of truncated model output. */
 function salvageRecommendations(content: string): Synthesis["recommendations"] {
   const out: Synthesis["recommendations"] = [];
-  let depth = 0;
-  let start = -1;
+  // Scan every balanced { } pair at any depth. Recommendations are nested
+  // inside the outer object, so top-level-only scanning misses them when
+  // output truncates mid-array.
+  const stack: number[] = [];
   let inStr = false;
   let esc = false;
   for (let i = 0; i < content.length; i++) {
@@ -342,27 +367,25 @@ function salvageRecommendations(content: string): Synthesis["recommendations"] {
       continue;
     }
     if (ch === "{") {
-      if (depth === 0) start = i;
-      depth++;
+      stack.push(i);
       continue;
     }
     if (ch === "}") {
-      depth--;
-      if (depth === 0 && start >= 0) {
-        try {
-          const obj = JSON.parse(content.slice(start, i + 1)) as {
-            company?: unknown;
-            body?: unknown;
-          };
-          if (typeof obj.company === "string" && typeof obj.body === "string") {
+      const start = stack.pop();
+      if (start === undefined) continue;
+      try {
+        const obj = JSON.parse(content.slice(start, i + 1)) as {
+          company?: unknown;
+          body?: unknown;
+        };
+        if (typeof obj.company === "string" && typeof obj.body === "string") {
+          if (!out.some((r) => r.company === obj.company && r.body === obj.body)) {
             out.push(obj as Synthesis["recommendations"][number]);
           }
-        } catch {
-          // incomplete object — skip it, keep the complete ones
         }
-        start = -1;
+      } catch {
+        // incomplete object — skip it, keep the complete ones
       }
-      if (depth < 0) depth = 0;
     }
   }
   return out;
@@ -509,131 +532,133 @@ export async function synthesizeInquiry(inquiryId: string): Promise<void> {  awa
   } catch {
     // fall through with unavailable snapshot
   }
-  const compact = withSources.slice(0, 6).map((e, i) => {
+  const compact = withSources.slice(0, 4).map((e, i) => {
     const ticker = companyToTicker(e.company) ?? extractTicker(e.company);
     return {
       i,
-      company: e.company.slice(0, 80),
+      company: e.company.slice(0, 60),
       confidence: e.confidence,
-      claims: e.claims,
       independent_sources: e.independentSources,
-      top_claim: e.topClaim.slice(0, 600),
-      market: marketByCompany.get(e.company) ?? null,
-      marketFacts: marketByTicker.get(ticker) ?? null,
-      sources: e.sources.slice(0, 3).map((s) => ({
-        label: s.label.slice(0, 40),
-        url: s.url.slice(0, 200),
+      top_claim: e.topClaim.slice(0, 300),
+      market: marketByTicker.get(ticker) ?? null,
+      sources: e.sources.slice(0, 2).map((s) => ({
+        label: s.label.slice(0, 30),
+        url: s.url.slice(0, 150),
       })),
     };
   });
-  const marketShort = marketBlock.slice(0, 1800);
-  const userPrompt = `WATCH QUESTION:\n${inquiry.question}\n\nCLUSTERED EVIDENCE (each entry is one company with its strongest claim and sources):\n${compact
+  const marketShort = marketBlock.slice(0, 800);
+  const userPrompt = `WATCH:\n${inquiry.question.slice(0, 200)}\nEVIDENCE:\n${compact
     .map((p) => JSON.stringify(p))
-    .join("\n")}\n\n${marketShort}\n\nWrite the readout now. Facts first, then what each finding suggests for the watched ticker through its exposure path. Every recommendation MUST include verdict, marketCall with numbers, and timeframe.`;
+    .join("\n")}\n${marketShort}\nWrite the readout. Every item MUST have verdict, marketCall with numbers, timeframe.`;
   synthesis = fallbackSynthesis(inquiry.question, withSources, marketByTicker);
   let lastError = "router not attempted";
   let wroteThesis = false;
-  if (router.live) {
-    for (let attempt = 0; attempt < 3 && !wroteThesis; attempt++) {
-      if (attempt > 0) await new Promise((r) => setTimeout(r, 4000));
-      try {
-        const soul = await guidedSystem(SYSTEM);
-        const result = await chatJson({
-          system: soul,
-          user: userPrompt,
-          maxTokens: 2200,
-          temperature: 0.3,
-          timeoutMs: 60_000,
-        });
-        synthesis = coerceSynthesis(result.content, withSources, marketByTicker);
-        wroteThesis = true;
-        break;
-      } catch (error) {
-        lastError = error instanceof Error ? error.message.slice(0, 200) : "synthesis call failed";
-        const raw = (error as { rawContent?: unknown }).rawContent;
-        if (typeof raw === "string" && raw.length > 50) {
-          try {
-            const salvaged = coerceSynthesis(raw, withSources, marketByTicker);
-            if (salvaged.recommendations.length > 0) {
-              synthesis = salvaged;
-              wroteThesis = true;
-              break;
-            }
-          } catch {
-            // keep retrying
+  // Short contract: long prompts make small/free models return empty.
+  // Details (source re-attach, missing-field fill) stay in code.
+  // Key names are repeated because models invent their own shape otherwise.
+  const leanSystem = `Return ONLY one JSON object with EXACTLY these top-level keys: preamble, recommendations. No other keys. No markdown. No prose.
+recommendations is an array of 1-4 objects with EXACTLY these keys: company, title, body, confidence, verdict, marketCall, timeframe, sources.
+verdict is one of: underpriced, priced, unclear. marketCall is one sentence with price numbers. timeframe is like "1 to 4 weeks".
+Body is 3 short sentences: what we found, the exposure path into the watched ticker, take plus invalidation. Plain warm spoken words, no buy/sell language.
+Example: {"preamble":"...","recommendations":[{"company":"NVIDIA","title":"...","body":"...","confidence":82,"verdict":"underpriced","marketCall":"...","timeframe":"1 to 4 weeks","sources":[{"label":"...","url":"..."}]}]}
+Doctrine: thesis first, price last. Facts separate from inference.`;
+  type ThesisCall = (opts: {
+    system: string;
+    user: string;
+    maxTokens?: number;
+    temperature?: number;
+    timeoutMs?: number;
+  }) => Promise<{ content: string }>;
+  // The model sometimes drops a company. Backfill missing threads from the
+  // deterministic market-aware builder so no evidence is silently lost.
+  function withBackfill(parsed: Synthesis): Synthesis {
+    const covered = new Set(parsed.recommendations.map((r) => normalizeCompany(r.company)));
+    const missing = withSources.filter((e) => !covered.has(normalizeCompany(e.company)));
+    if (missing.length === 0 || parsed.recommendations.length >= 6) return parsed;
+    const fill = fallbackSynthesis(inquiry.question, missing, marketByTicker);
+    return {
+      preamble: parsed.preamble,
+      recommendations: [...parsed.recommendations, ...fill.recommendations].slice(0, 6),
+    };
+  }
+  // One attempt: coerce, salvage raw output, else repair by asking the model
+  // to reformat its own bad output into the exact schema. Empty
+  // recommendations never count as a thesis.
+  async function attemptThesis(
+    call: ThesisCall,
+    label: string,
+    temperature: number,
+  ): Promise<boolean> {
+    try {
+      const result = await call({
+        system: leanSystem,
+        user: userPrompt,
+        maxTokens: 1200,
+        temperature,
+        timeoutMs: 60_000,
+      });
+      const parsed = coerceSynthesis(result.content, withSources, marketByTicker);
+      if (parsed.recommendations.length === 0) throw new Error(`${label} returned zero recommendations`);
+      synthesis = withBackfill(parsed);
+      return true;
+    } catch (error) {
+      lastError = error instanceof Error ? error.message.slice(0, 200) : `${label} call failed`;
+      const raw = (error as { rawContent?: unknown }).rawContent;
+      const candidates = typeof raw === "string" && raw.length > 50 ? [raw] : [];
+      for (const text of candidates) {
+        try {
+          const salvaged = coerceSynthesis(text, withSources, marketByTicker);
+          if (salvaged.recommendations.length > 0) {
+            synthesis = withBackfill(salvaged);
+            return true;
           }
+        } catch {
+          // try repair below
+        }
+        // Repair pass: hand the bad output back with the skeleton.
+        try {
+          const fixed = await call({
+            system: `Reformat into EXACTLY {"preamble":string,"recommendations":[{"company":string,"title":string,"body":string,"confidence":number 10-100,"verdict":"underpriced|priced|unclear","marketCall":string,"timeframe":string,"sources":[{"label":string,"url":string}]}]}. JSON only, no prose. Never write buy/sell/long/short orders. marketCall states where price sits with numbers and whether the move is in the price. confidence is 10-100.`,
+            user: `Reformat this into the exact schema, keeping all facts and numbers:\n${text.slice(0, 3000)}`,
+            maxTokens: 1200,
+            temperature: 0.2,
+            timeoutMs: 45_000,
+          });
+          const repaired = coerceSynthesis(fixed.content, withSources, marketByTicker);
+          if (repaired.recommendations.length > 0) {
+            synthesis = withBackfill(repaired);
+            return true;
+          }
+        } catch {
+          // fall through to next provider
         }
       }
+      return false;
+    }
+  }
+  // Zen first: free, fast, and user-configured for launch. Then 0G, then OpenRouter.
+  // Temperature escalates per attempt to escape repetitive failure modes.
+  if (zen.live) {
+    for (let attempt = 0; attempt < 2 && !wroteThesis; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 3000));
+      wroteThesis = await attemptThesis(chatJsonZen, "zen", attempt === 0 ? 0.3 : 0.6);
+    }
+    if (!wroteThesis) console.error("Zen thesis failed, trying 0G:", lastError);
+  }
+  if (!wroteThesis && router.live) {
+    for (let attempt = 0; attempt < 2 && !wroteThesis; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 4000));
+      wroteThesis = await attemptThesis(chatJson, "0G", attempt === 0 ? 0.3 : 0.6);
     }
     if (!wroteThesis) console.error("0G thesis failed, trying OpenRouter:", lastError);
   }
   if (!wroteThesis && openRouter.live) {
     for (let attempt = 0; attempt < 2 && !wroteThesis; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, 3000));
-      try {
-        const soul = await guidedSystem(SYSTEM);
-        const result = await chatJsonOpenRouter({
-          system: soul,
-          user: userPrompt,
-          maxTokens: 2200,
-          temperature: 0.3,
-          timeoutMs: 60_000,
-        });
-        synthesis = coerceSynthesis(result.content, withSources, marketByTicker);
-        wroteThesis = true;
-        break;
-      } catch (error) {
-        lastError = error instanceof Error ? error.message.slice(0, 200) : "openrouter call failed";
-        const raw = (error as { rawContent?: unknown }).rawContent;
-        if (typeof raw === "string" && raw.length > 50) {
-          try {
-            const salvaged = coerceSynthesis(raw, withSources, marketByTicker);
-            if (salvaged.recommendations.length > 0) {
-              synthesis = salvaged;
-              wroteThesis = true;
-              break;
-            }
-          } catch {
-            // keep retrying
-          }
-        }
-      }
+      wroteThesis = await attemptThesis(chatJsonOpenRouter, "openrouter", attempt === 0 ? 0.3 : 0.6);
     }
     if (!wroteThesis) console.error("OpenRouter thesis failed:", lastError);
-  }
-  if (!wroteThesis && zen.live) {
-    for (let attempt = 0; attempt < 2 && !wroteThesis; attempt++) {
-      if (attempt > 0) await new Promise((r) => setTimeout(r, 3000));
-      try {
-        const soul = await guidedSystem(SYSTEM);
-        const result = await chatJsonZen({
-          system: soul,
-          user: userPrompt,
-          maxTokens: 2200,
-          temperature: 0.3,
-          timeoutMs: 60_000,
-        });
-        synthesis = coerceSynthesis(result.content, withSources, marketByTicker);
-        wroteThesis = true;
-        break;
-      } catch (error) {
-        lastError = error instanceof Error ? error.message.slice(0, 200) : "zen call failed";
-        const raw = (error as { rawContent?: unknown }).rawContent;
-        if (typeof raw === "string" && raw.length > 50) {
-          try {
-            const salvaged = coerceSynthesis(raw, withSources, marketByTicker);
-            if (salvaged.recommendations.length > 0) {
-              synthesis = salvaged;
-              wroteThesis = true;
-              break;
-            }
-          } catch {
-            // keep retrying
-          }
-        }
-      }
-    }
-    if (!wroteThesis) console.error("Zen thesis failed:", lastError);
   }
   if (!wroteThesis) {
     // Deterministic thesis still carries the full Agent OS market call per

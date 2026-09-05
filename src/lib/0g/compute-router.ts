@@ -27,11 +27,11 @@ const ROUTER_BASE_URLS: Record<ZeroGNetwork, string> = {
   testnet: "https://router-api-testnet.integratenetwork.work/v1",
 };
 
-/** Cheap, widely available on the catalog; override with ZERO_G_COMPUTE_MODEL. */
-const DEFAULT_MODEL = "zai-org/GLM-5-FP8";
+/** Catalog IDs verified live against the router. Override with ZERO_G_COMPUTE_MODEL. */
+const DEFAULT_MODEL = "glm-5";
 
 /** Second chance when the primary deployment returns empty content. */
-const FALLBACK_MODEL = "glm-5";
+const FALLBACK_MODEL = "deepseek-v4-flash";
 
 function readEnv(name: string): string | undefined {
   const value = process.env[name];

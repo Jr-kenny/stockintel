@@ -21,7 +21,7 @@ function readEnv(name: string): string | undefined {
 export function zenConfig(): { live: boolean; apiKey: string; model: string } {
   const apiKey = readEnv("OPENCODE_ZEN_API_KEY") ?? "";
   const model =
-    readEnv("ZEN_MODEL") ?? readEnv("OPENCODE_ZEN_MODEL") ?? "mimo-v2.5-free";
+    readEnv("ZEN_MODEL") ?? readEnv("OPENCODE_ZEN_MODEL") ?? "muse-spark-1.3-contributor-free";
   return { live: apiKey.length > 0, apiKey, model };
 }
 

@@ -196,8 +196,9 @@ function salvageVerdicts(
   offset: number,
 ): [number, ClaimVerdict][] {
   const out: [number, ClaimVerdict][] = [];
-  let depth = 0;
-  let start = -1;
+  const seen = new Set<number>();
+  // Grades nest inside {"grades":[...]}, so scan every balanced pair.
+  const stack: number[] = [];
   let inStr = false;
   let esc = false;
   for (let i = 0; i < text.length; i++) {
@@ -213,36 +214,33 @@ function salvageVerdicts(
       continue;
     }
     if (ch === "{") {
-      if (depth === 0) start = i;
-      depth++;
+      stack.push(i);
       continue;
     }
     if (ch === "}") {
-      depth--;
-      if (depth === 0 && start >= 0) {
-        try {
-          const g = JSON.parse(text.slice(start, i + 1)) as {
-            i?: unknown;
-            relevance?: unknown;
-            quality?: unknown;
-            note?: unknown;
-          };
-          if (typeof g.i === "number" && g.i >= offset && g.i < offset + expectedCount) {
-            out.push([
-              g.i,
-              {
-                relevance: clamp01(g.relevance),
-                quality: clamp01(g.quality),
-                note: typeof g.note === "string" ? g.note.slice(0, 160) : "",
-              },
-            ]);
-          }
-        } catch {
-          // incomplete object — skip it, keep the complete ones
+      const start = stack.pop();
+      if (start === undefined) continue;
+      try {
+        const g = JSON.parse(text.slice(start, i + 1)) as {
+          i?: unknown;
+          relevance?: unknown;
+          quality?: unknown;
+          note?: unknown;
+        };
+        if (typeof g.i === "number" && g.i >= offset && g.i < offset + expectedCount && !seen.has(g.i)) {
+          seen.add(g.i);
+          out.push([
+            g.i,
+            {
+              relevance: clamp01(g.relevance),
+              quality: clamp01(g.quality),
+              note: typeof g.note === "string" ? g.note.slice(0, 160) : "",
+            },
+          ]);
         }
-        start = -1;
+      } catch {
+        // incomplete object — skip it, keep the complete ones
       }
-      if (depth < 0) depth = 0;
     }
   }
   return out;
