@@ -1,7 +1,10 @@
 /**
- * OpenRouter backup for thesis writing. Same contract as 0G chatJson.
- * Set OPENROUTER_API_KEY to enable. Model defaults to a cheap JSON-safe
- * instruction model, override with PRIME_GRADE_MODEL or OPENROUTER_MODEL.
+ * OpenRouter thesis provider. Set OPENROUTER_API_KEY to enable.
+ * Defaults to a free model (GLM family writes our thesis JSON reliably),
+ * override with OPENROUTER_MODEL or PRIME_GRADE_MODEL.
+ * Other free candidates if the default ever degrades:
+ * minimax/minimax-m3:free, nvidia/nemotron-3-super-120b-a12b:free,
+ * google/gemma-4-31b-it:free, minimax/minimax-m2.7:free.
  */
 
 export type OpenRouterResult = {
@@ -19,7 +22,7 @@ export function openRouterConfig(): { live: boolean; apiKey: string; model: stri
   const model =
     readEnv("OPENROUTER_MODEL") ??
     readEnv("PRIME_GRADE_MODEL") ??
-    "google/gemini-2.5-flash";
+    "z-ai/glm-5.2:free";
   return { live: apiKey.length > 0, apiKey, model };
 }
 

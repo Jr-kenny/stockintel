@@ -647,28 +647,28 @@ Doctrine: thesis first, price last. Facts separate from inference.`;
       return false;
     }
   }
-  // Zen first: free, fast, and user-configured for launch. Then 0G, then OpenRouter.
+  // OpenRouter first when keyed (free default), then 0G, then Zen.
   // Temperature escalates per attempt to escape repetitive failure modes.
-  if (zen.live) {
+  if (openRouter.live) {
     for (let attempt = 0; attempt < 2 && !wroteThesis; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, 3000));
-      wroteThesis = await attemptThesis(chatJsonZen, "zen", attempt === 0 ? 0.3 : 0.6);
+      wroteThesis = await attemptThesis(chatJsonOpenRouter, "openrouter", attempt === 0 ? 0.3 : 0.6);
     }
-    if (!wroteThesis) console.error("Zen thesis failed, trying 0G:", lastError);
+    if (!wroteThesis) console.error("OpenRouter thesis failed, trying 0G:", lastError);
   }
   if (!wroteThesis && router.live) {
     for (let attempt = 0; attempt < 2 && !wroteThesis; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, 4000));
       wroteThesis = await attemptThesis(chatJson, "0G", attempt === 0 ? 0.3 : 0.6);
     }
-    if (!wroteThesis) console.error("0G thesis failed, trying OpenRouter:", lastError);
+    if (!wroteThesis) console.error("0G thesis failed, trying Zen:", lastError);
   }
-  if (!wroteThesis && openRouter.live) {
+  if (!wroteThesis && zen.live) {
     for (let attempt = 0; attempt < 2 && !wroteThesis; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, 3000));
-      wroteThesis = await attemptThesis(chatJsonOpenRouter, "openrouter", attempt === 0 ? 0.3 : 0.6);
+      wroteThesis = await attemptThesis(chatJsonZen, "zen", attempt === 0 ? 0.3 : 0.6);
     }
-    if (!wroteThesis) console.error("OpenRouter thesis failed:", lastError);
+    if (!wroteThesis) console.error("Zen thesis failed:", lastError);
   }
   if (!wroteThesis) {
     // Deterministic thesis still carries the full Agent OS market call per
