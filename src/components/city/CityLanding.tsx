@@ -65,9 +65,10 @@ const FALLBACK_TAPE: [string, string][] = [
 function Windows({ cols, rows, seed }: { cols: number; rows: number; seed: number }) {
   const cells = [];
   for (let i = 0; i < rows * cols; i++) {
-    const lit = (seed * 7 + i * 13) % 10 < 5;
-    const tone = (seed + i) % 7 === 0 ? "cool" : (seed + i) % 4 === 0 ? "warm" : "";
-    cells.push(<i key={i} className={`win${lit ? " on" : ""} ${tone}`} aria-hidden />);
+    // Deterministic so server and client render the same lattice.
+    const lit = (seed * 7 + i * 13) % 20 < 11;
+    const tone = (seed + i) % 7 === 0 ? " cool" : (seed + i) % 4 === 0 ? " warm" : "";
+    cells.push(<i key={i} className={`win${lit ? " on" : ""}${tone}`} aria-hidden />);
   }
   return <div className="wins" style={{ ["--cols" as string]: cols }}>{cells}</div>;
 }
