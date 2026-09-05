@@ -1,9 +1,12 @@
 .city {
   --night: 0;
+  --shx: 30;
+  --shy: 14;
   position: relative;
   background: linear-gradient(to bottom, #6fb7ff 0%, #dff0ff 55%, #f5efe6 100%);
   color: #2a2333;
   overflow: clip;
+  padding-bottom: 34px;
 }
 
 .city-stars {
@@ -72,18 +75,50 @@
   position: absolute; inset: 0; transform-style: preserve-3d;
   transform: rotateX(60deg) rotateZ(45deg);
   background:
+    repeating-linear-gradient(to right, transparent 0 18px, rgba(255,240,200,0.9) 18px 30px, transparent 30px 40px) 0 268px / 100% 3px no-repeat,
+    repeating-linear-gradient(to bottom, transparent 0 18px, rgba(255,240,200,0.9) 18px 30px, transparent 30px 40px) 268px 0 / 3px 100% no-repeat,
     linear-gradient(#5b5f6b, #5b5f6b) 0 225px / 100% 90px no-repeat,
     linear-gradient(#5b5f6b, #5b5f6b) 225px 0 / 90px 100% no-repeat,
     linear-gradient(#d9d3c7, #d9d3c7) 0 213px / 100% 114px no-repeat,
     linear-gradient(#d9d3c7, #d9d3c7) 213px 0 / 114px 100% no-repeat,
     #b9d59a;
-  box-shadow: 0 0 0 6px #c9c2b4, 0 40px 60px -20px rgba(20,20,50,.5);
+  box-shadow: 0 0 0 6px #c9c2b4, 0 0 0 7px rgba(0,0,0,0.15), 0 40px 60px -20px rgba(20,20,50,.5);
   border-radius: 6px;
 }
-.city-ground::after { content: ""; position: absolute; inset: 0; background: rgba(20,30,70,calc(var(--night) * .5)); border-radius: inherit; }
+.city-ground::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: rgba(20,30,70,calc(var(--night) * .5)); border-radius: inherit; }
+
+.city-tree {
+  position: absolute; width: 14px; height: 14px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #8ac27a, #4f8a48);
+  transform: translateZ(10px); box-shadow: 4px 6px 0 rgba(0,0,0,.15);
+}
+.city-tree::before { content: ""; position: absolute; left: 6px; top: 6px; width: 2px; height: 10px; background: #6b4a2b; transform-origin: 0 0; transform: rotateX(-90deg); }
+
+.city-car {
+  position: absolute; width: 12px; height: 7px; border-radius: 2px; transform-style: preserve-3d;
+  background: var(--cc); box-shadow: 0 1px 0 rgba(0,0,0,.3);
+  animation: city-drive linear infinite;
+}
+.city-car::before, .city-car::after { content: ""; position: absolute; top: 1px; width: 3px; height: 5px; border-radius: 1px; }
+.city-car::before { right: -2px; background: #fff7d6; box-shadow: 8px 0 8px 3px rgba(255,247,214,calc(var(--night) * .8)); }
+.city-car::after { left: -1px; background: #ff4b4b; box-shadow: 0 0 6px 2px rgba(255,75,75,calc(var(--night) * .8)); }
+.city-car-x1 { top: 236px; animation-name: city-drive-east; animation-duration: 9s; }
+.city-car-x2 { top: 296px; animation-name: city-drive-west; animation-duration: 12s; animation-delay: -5s; }
+.city-car-y1 { left: 240px; width: 7px; height: 12px; animation-name: city-drive-south; animation-duration: 11s; animation-delay: -3s; }
+.city-car-y2 { left: 296px; width: 7px; height: 12px; animation-name: city-drive-north; animation-duration: 8s; animation-delay: -7s; }
+.city-car-y1::before, .city-car-y2::before { right: 1px; top: auto; bottom: -2px; width: 5px; height: 3px; }
+.city-car-y1::after, .city-car-y2::after { left: 1px; top: -1px; width: 5px; height: 3px; }
+@keyframes city-drive-east { from { transform: translate3d(-30px, 0, 2px); } to { transform: translate3d(570px, 0, 2px); } }
+@keyframes city-drive-west { from { transform: translate3d(570px, 0, 2px) rotate(180deg); } to { transform: translate3d(-30px, 0, 2px) rotate(180deg); } }
+@keyframes city-drive-south { from { transform: translate3d(0, -30px, 2px) rotate(90deg); } to { transform: translate3d(0, 570px, 2px) rotate(90deg); } }
+@keyframes city-drive-north { from { transform: translate3d(0, 570px, 2px) rotate(-90deg); } to { transform: translate3d(0, -30px, 2px) rotate(-90deg); } }
 
 .city-slot { position: absolute; left: var(--x); top: var(--y); width: var(--w); height: var(--d); transform-style: preserve-3d; }
-.city-shadow { position: absolute; inset: 0; background: rgba(20,25,60,.28); filter: blur(3px); transform: translate(18px, 8px); }
+.city-shadow {
+  position: absolute; inset: 0; background: rgba(20, 25, 60, .28); filter: blur(3px);
+  transform: translate(calc(var(--shx) * var(--h) / 100), calc(var(--shy) * var(--h) / 100)) translateZ(0.5px);
+  opacity: calc(1 - var(--night) * .7);
+}
 .city-b {
   position: absolute; inset: 0; transform-style: preserve-3d; cursor: pointer;
   background: none; border: 0; padding: 0;
@@ -93,7 +128,8 @@
 .city-b:hover, .city-b:focus-visible { transform: translateZ(26px); outline: 2px solid #2a2333; outline-offset: 4px; }
 .city-face { position: absolute; left: 0; top: 0; background: var(--c); overflow: hidden; display: block; }
 .city-face::before { content: ""; position: absolute; inset: 0; background: rgba(18,24,66,calc(var(--night) * .55)); z-index: 2; }
-.city-top { width: var(--w); height: var(--d); transform: translateZ(var(--h)); }
+.city-top { width: var(--w); height: var(--d); transform: translateZ(var(--h)); transform-style: preserve-3d; overflow: visible; }
+.city-top::after { content: ""; position: absolute; inset: 0; background: rgba(255,255,255,.16); box-shadow: inset 6px 6px 0 -5px rgba(0,0,0,.06), inset -6px -6px 0 -5px rgba(0,0,0,.06); }
 .city-south { width: var(--w); height: var(--h); transform: translateY(var(--d)) translateZ(var(--h)) rotateX(-90deg); filter: brightness(.96); }
 .city-east { width: var(--d); height: var(--h); transform: translateX(var(--w)) translateZ(var(--h)) rotateZ(90deg) rotateX(-90deg); filter: brightness(.74); }
 .city-door { position: absolute; bottom: 0; left: 50%; width: 12px; height: 10px; transform: translateX(-50%); background: #4c3d3a; }
@@ -110,11 +146,18 @@
 .city-tag b { display: block; font-family: Georgia, serif; font-size: 14px; }
 .city-b:hover .city-tag, .city-b:focus-visible .city-tag { opacity: 1; transform: translate(-50%,-50%) translateZ(36px) rotateZ(-45deg) rotateX(-60deg) translateY(-40px); }
 .city-neon {
-  position: absolute; left: 50%; top: 62%; transform: translateX(-50%);
-  background: #2a2038; color: #ff5fb8; border: 2px solid #3c2d4f; border-radius: 4px;
-  font-family: Georgia, serif; font-style: italic; padding: .4rem 1rem;
-  text-shadow: 0 0 8px #ff5fb8; box-shadow: 0 0 20px rgba(255,95,184,.4);
+  position: absolute; left: 50%; top: 100%; width: 150px; height: 34px; margin-left: -75px;
+  transform-origin: 0 0; transform: translateZ(64px) rotateX(-90deg);
+  background: #2a2038; border-radius: 4px; border: 2px solid #3c2d4f;
+  display: grid; place-items: center;
+  font-family: Georgia, serif; font-style: italic; font-size: 16px; letter-spacing: .08em; color: #ff5fb8;
+  text-shadow: 0 0 6px #ff5fb8, 0 0 14px #ff2fa0, 0 0 30px rgba(255,47,160,.6);
+  animation: city-neon-flicker 5s steps(1, end) infinite;
+  box-shadow: 0 0 20px rgba(255,95,184,calc(.25 + var(--night) * .55));
 }
+.city-neon::before, .city-neon::after { content: ""; position: absolute; bottom: -18px; width: 2px; height: 18px; background: #6a5a7a; }
+.city-neon::before { left: 20px; } .city-neon::after { right: 20px; }
+@keyframes city-neon-flicker { 0%, 90%, 100% { opacity: 1; } 91%, 93% { opacity: .55; } 92% { opacity: 1; } }
 
 .city-loop { background: #f6f1e7; border-top: 1px solid #d9dfee; }
 .city-loop-inner { max-width: 60rem; margin: 0 auto; padding: 3rem clamp(1.25rem, 4vw, 3rem) 4rem; }
@@ -122,7 +165,7 @@
 .city-loop ol { margin: 1.5rem 0 0; padding: 0; list-style: none; display: grid; gap: 1rem; }
 .city-loop li { line-height: 1.6; border-top: 2px solid #2a2333; padding-top: .8rem; }
 
-.city-tape { background: rgba(42,35,51,.9); color: #f5efe6; overflow: hidden; white-space: nowrap; font-size: 12px; }
+.city-tape { position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; background: rgba(42,35,51,.9); color: #f5efe6; overflow: hidden; white-space: nowrap; font-size: 12px; }
 .city-tape-track { display: inline-block; padding: 8px 0; animation: city-tape 28s linear infinite; }
 .city-tape-track span { margin: 0 18px; }
 .city-tape-track .up { color: #8ac27a; font-style: normal; }
@@ -133,9 +176,8 @@
 @media (max-width: 960px) {
   .city-hero { grid-template-columns: 1fr; }
   .city-stage { min-height: 28rem; order: 2; }
-  .city-scene { transform: translate(-50%, -50%) scale(.62); }
 }
 @media (prefers-reduced-motion: reduce) {
   .city-tape-track { animation: none; }
-  .city-b, .city-tag { transition: none; }
+  .city-b, .city-tag, .city-car { animation-duration: 40s; transition: none; }
 }

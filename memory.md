@@ -1,6 +1,9 @@
 # Memory
 
-## 2026-09-05 — First real full call + headline guard
-- Ran a genuine full NVDA call locally after restarting grid on current code: 10 agents dispatched, 30 real claims, 9 clusters, gradeMode llm, complete with no error. LLM thesis wrote with preamble, NVIDIA 74 priced with price levels, Microsoft and Dell with market calls, live Binance snapshot for 5 names. No sales language anywhere. Total cycle near 8 minutes.
-- Real run exposed short headline fragments reaching readout (AI Capex, Tech, Dell Doubles AI Server). Headline guard now covers verbs, generic-only names, possessive tails, length, sponsored. Verified perfect on 25 names (12 dropped, 13 kept). In run.ts readout plus synthesize.ts merge.
-- Grid left running fresh on current code (dev 28455, agents on 8790 to 8799). Test inquiry removed from DB. Committed as 37fbef2. Push plus deploy still pending remote URL.
+## 2026-09-05 — Production live end to end
+- App: https://stockintel-eight.vercel.app, auto-deploys from GitHub on push.
+- Agents: 10 systemd services on AWS i-0018b77942c4452bc (100.61.3.35:8790-8799), code at /opt/stockintel, deploy key aws-agents read-only.
+- DB: sqld docker on same box port 8000, Ed25519 JWT auth. Private key JWK at /tmp/sqld-priv.jwk on Mac only, 10y JWT in Vercel DATABASE_AUTH_TOKEN. Data persists in docker volume sqld-data.
+- Vercel env: DATABASE_URL, DATABASE_AUTH_TOKEN, OPENROUTER_API_KEY, ZERO_G_*, OPENCODE_ZEN_API_KEY, VITE_PRIVY_APP_ID, PUBLIC_SUBMIT_URL all set. GitHub integration connected.
+- First prod full NVDA call: complete, 10 agents, 30 claims, 8 clusters, llm grading, LLM thesis with merge behavior, live Binance snapshot. Exposed headline fragments plus memecoin mappings, both fixed and verified on names, deployed everywhere.
+- Local Mac grid left running for dev. scripts/full-call.ts kept as the full-call driver (PUBLIC_SUBMIT_URL plus DATABASE_URL envs point it at any backend).
