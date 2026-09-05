@@ -489,6 +489,7 @@ function salvagePreamble(content: string): string {
 export async function synthesizeInquiry(inquiryId: string): Promise<void> {  await ensureSchema();
   const [inquiry] = await db.select().from(inquiries).where(eq(inquiries.id, inquiryId));
   if (!inquiry || !inquiry.readoutJson) return;
+  const inquiryQuestion: string = inquiry.question;
 
   const readout = JSON.parse(inquiry.readoutJson) as ReadoutEntry[];
   const claimRows = await db.select().from(claims).where(eq(claims.inquiryId, inquiryId));
@@ -663,7 +664,7 @@ Example: {"preamble":"...","recommendations":[{"company":"NVIDIA","title":"...",
     const covered = new Set(parsed.recommendations.map((r) => normalizeCompany(r.company)));
     const missing = withSources.filter((e) => !covered.has(normalizeCompany(e.company)));
     if (missing.length === 0 || parsed.recommendations.length >= 6) return parsed;
-    const fill = fallbackSynthesis(inquiry.question, missing, marketByTicker);
+    const fill = fallbackSynthesis(inquiryQuestion, missing, marketByTicker);
     return {
       preamble: parsed.preamble,
       recommendations: [...parsed.recommendations, ...fill.recommendations].slice(0, 6),
