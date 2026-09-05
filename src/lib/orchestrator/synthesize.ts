@@ -3,6 +3,7 @@ import { claims, inquiries } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { chatJson, computeRouterConfig } from "@/lib/0g/compute-router";
 import { chatJsonOpenRouter, openRouterConfig } from "@/lib/llm/openrouter";
+import { chatJsonZen, zenConfig } from "@/lib/llm/zen";
 import { guidedSystem } from "./soul";
 import { buildMarketSnapshot, companyToTicker, extractTicker } from "@/lib/binance/market";
 import { getKlines, marketTest, positioningGauge } from "@/lib/binance/market-test";
@@ -429,6 +430,7 @@ export async function synthesizeInquiry(inquiryId: string): Promise<void> {  awa
   let synthesis: Synthesis;
   const router = computeRouterConfig();
   const openRouter = openRouterConfig();
+  const zen = zenConfig();
   // Live market check (Binance Agent OS data): snapshot plus positioning gauge.
   // This is the product. It runs first and every thesis path below carries it.
   let marketBlock = "MARKET SNAPSHOT: unavailable (no Binance listing matched).";
@@ -598,6 +600,40 @@ export async function synthesizeInquiry(inquiryId: string): Promise<void> {  awa
       }
     }
     if (!wroteThesis) console.error("OpenRouter thesis failed:", lastError);
+  }
+  if (!wroteThesis && zen.live) {
+    for (let attempt = 0; attempt < 2 && !wroteThesis; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 3000));
+      try {
+        const soul = await guidedSystem(SYSTEM);
+        const result = await chatJsonZen({
+          system: soul,
+          user: userPrompt,
+          maxTokens: 2200,
+          temperature: 0.3,
+          timeoutMs: 60_000,
+        });
+        synthesis = coerceSynthesis(result.content, withSources, marketByTicker);
+        wroteThesis = true;
+        break;
+      } catch (error) {
+        lastError = error instanceof Error ? error.message.slice(0, 200) : "zen call failed";
+        const raw = (error as { rawContent?: unknown }).rawContent;
+        if (typeof raw === "string" && raw.length > 50) {
+          try {
+            const salvaged = coerceSynthesis(raw, withSources, marketByTicker);
+            if (salvaged.recommendations.length > 0) {
+              synthesis = salvaged;
+              wroteThesis = true;
+              break;
+            }
+          } catch {
+            // keep retrying
+          }
+        }
+      }
+    }
+    if (!wroteThesis) console.error("Zen thesis failed:", lastError);
   }
   if (!wroteThesis) {
     // Deterministic thesis still carries the full Agent OS market call per
