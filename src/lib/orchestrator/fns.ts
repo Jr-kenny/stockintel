@@ -133,6 +133,7 @@ export type SynthesisView = {
     at: string;
     lines: string[];
     byCompany: Record<string, { symbol: string; price: number; change24hPct: number }>;
+    source?: "agent-os" | "mirror";
   } | null;
 };
 
@@ -160,6 +161,7 @@ const marketSchema = z
     byCompany: z.record(
       z.object({ symbol: z.string(), price: z.number(), change24hPct: z.number() }),
     ),
+    source: z.enum(["agent-os", "mirror"]).optional().default("mirror"),
   })
   .nullable()
   .optional();

@@ -18,6 +18,20 @@ export type GaugeLine = { label: string; detail: string };
 const REST_BASE = "https://data-api.binance.vision";
 
 export async function getKlines(symbol: string, limit = 120): Promise<Candle[]> {
+  // Agent OS first; any failure falls through to the mirror.
+  try {
+    const { agentOsConfig, agentOsKlines } = await import("./agent-os");
+    if (agentOsConfig().live) {
+      try {
+        const rows = await agentOsKlines(symbol, limit);
+        if (rows.length >= 15) return rows;
+      } catch {
+        // fall through to mirror
+      }
+    }
+  } catch {
+    // fall through to mirror
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10_000);
   try {

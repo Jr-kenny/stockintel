@@ -523,7 +523,7 @@ export async function synthesizeInquiry(inquiryId: string): Promise<void> {  awa
   let marketBlock = "MARKET SNAPSHOT: unavailable (no Binance listing matched).";
   const marketByCompany = new Map<string, { symbol: string; price: number; change24hPct: number }>();
   const marketByTicker = new Map<string, MarketFacts>();
-  let marketPersist: { at: string; lines: string[]; byCompany: Record<string, { symbol: string; price: number; change24hPct: number }> } | null = null;
+  let marketPersist: { at: string; lines: string[]; byCompany: Record<string, { symbol: string; price: number; change24hPct: number }>; source: "agent-os" | "mirror" } | null = null;
   try {
     const snapshot = await buildMarketSnapshot(
       withSources.map((e) => e.company),
@@ -534,6 +534,7 @@ export async function synthesizeInquiry(inquiryId: string): Promise<void> {  awa
       at: nowIso(),
       lines: snapshot.lines,
       byCompany: Object.fromEntries(snapshot.byCompany),
+      source: snapshot.source,
     };
     if (snapshot.lines.length > 0) {
       marketBlock = `MARKET SNAPSHOT (live, Binance, 24h):\n${snapshot.lines.join("\n")}\nUse this as the market test: compare event freshness against the observed move. A fresh strong chain with a small move suggests underpriced; a large move already reflecting the event suggests priced.`;

@@ -11,6 +11,7 @@
 // geo restrictions. api.binance.com refuses US IPs, which is where serverless
 // functions run, so every public quote here goes through the mirror.
 const REST_BASE = "https://data-api.binance.vision";
+export let lastQuoteSource: "agent-os" | "mirror" = "mirror";
 
 export type Quote = {
   ticker: string;
@@ -132,6 +133,21 @@ export const KNOWN_COMPANIES: Record<string, string> = {
 };
 
 async function fetch24hr(symbol: string): Promise<Resolved | null> {
+  // Agent OS first (Track A path). Any failure falls through to the mirror.
+  try {
+    const { agentOsConfig, agentOsTicker } = await import("./agent-os");
+    if (agentOsConfig().live) {
+      try {
+        const t = await agentOsTicker(symbol);
+        lastQuoteSource = "agent-os";
+        return { symbol, price: t.price, change24hPct: t.change24hPct, volume24hQuote: 0 };
+      } catch {
+        // fall through to mirror
+      }
+    }
+  } catch {
+    // fall through to mirror
+  }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8_000);
   try {
@@ -199,7 +215,7 @@ export type CompanyMarket = { symbol: string; price: number; change24hPct: numbe
 export async function buildMarketSnapshot(
   companies: string[],
   question: string,
-): Promise<{ lines: string[]; byCompany: Map<string, CompanyMarket> }> {
+): Promise<{ lines: string[]; byCompany: Map<string, CompanyMarket>; source: "agent-os" | "mirror" }> {
   const tickers = new Set<string>();
   for (const name of companies) {
     // Try every candidate spelling; the first live Binance listing wins.
@@ -215,7 +231,23 @@ export async function buildMarketSnapshot(
   if (qTick) tickers.add(qTick);
   const byCompany = new Map<string, CompanyMarket>();
   const lines: string[] = [];
-  if (tickers.size === 0) return { lines, byCompany };
+  lastQuoteSource = "mirror";
+  // Read-only account context via Agent OS when authorized (positions inside
+  // the permissioned Agentic sub-account). Never blocks the snapshot.
+  let accountLines: string[] = [];
+  try {
+    const { agentOsConfig, agentOsAccount } = await import("./agent-os");
+    if (agentOsConfig().live) {
+      try {
+        accountLines = (await agentOsAccount()).lines;
+      } catch {
+        // account scope not granted; prices still flow
+      }
+    }
+  } catch {
+    // account scope not granted; prices still flow
+  }
+  if (tickers.size === 0) return { lines, byCompany, source: lastQuoteSource };
   const quotes = await getQuotes([...tickers]);
   for (const q of quotes) {
     if (!q.symbol || q.price === null) {
@@ -230,5 +262,6 @@ export async function buildMarketSnapshot(
       }
     }
   }
-  return { lines, byCompany };
+  for (const l of accountLines) lines.push(`Account: ${l}`);
+  return { lines, byCompany, source: lastQuoteSource };
 }
