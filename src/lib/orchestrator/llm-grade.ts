@@ -58,6 +58,10 @@ You grade each claim on two dimensions only:
 You do NOT judge duplication: several specialists citing the same source is honest, correct work — the network already clusters sources deterministically.
 You do NOT score specialists. You grade individual claims only.
 
+A claim that only repeats an analyst rating or price target, with no new
+event or evidence behind it, scores low on quality no matter who said it.
+We build our own analyst; consensus is not evidence.
+
 Respond with JSON only, exactly this shape:
 {"grades":[{"i":<claim index>,"relevance":<0.0-1.0>,"quality":<0.0-1.0>,"note":"<max 12 words, why this matters for the watched ticker>"}]}
 Include every claim index. Never add prose outside the JSON.`;
