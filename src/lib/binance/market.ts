@@ -63,7 +63,8 @@ export function companyTickers(name: string): string[] {
     .split(/\s+/)
     .filter(Boolean);
   for (const t of tokens) {
-    if (!NAME_STOP.has(t.toUpperCase())) push(t);
+    const u = t.toUpperCase();
+    if (!NAME_STOP.has(u) && !GENERIC_WORD.has(u)) push(u);
   }
   if (tokens.length >= 2 && tokens.length <= 5) {
     const initials = tokens.map((t) => t[0]!.toUpperCase()).join("");
@@ -73,6 +74,23 @@ export function companyTickers(name: string): string[] {
   if (squashed.length >= 2) push(squashed);
   return out;
 }
+const GENERIC_WORD = new Set([
+  "AI",
+  "TECH",
+  "BIG",
+  "NEW",
+  "GLOBAL",
+  "TOP",
+  "DATA",
+  "MARKET",
+  "STOCK",
+  "CLOUD",
+  "CHIP",
+  "ALPHA",
+  "BETA",
+  "GAMMA",
+  "OMEGA",
+]);
 const NAME_STOP = new Set([
   "GROUP",
   "HOLDINGS",

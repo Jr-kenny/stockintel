@@ -656,12 +656,12 @@ export async function gradeAndSynthesize(inquiryId: string) {
     // entirely of generic sector words, and never starts with a preposition,
     // conjunction, or sponsored tag.
     const HEADLINE_VERBS = new Set(
-      "analyzing launches launched launch doubles doubled doubles raises raised raise cuts cut beats beat misses missed warns warned unveils unveiled posts posted reports reported says said plans planned wins won faces faced".split(
+      "analyzing launches launched launch doubles doubled doubles raises raised raise cuts cut beats beat misses missed warns warned unveils unveiled posts posted reports reported says said plans planned wins won faces faced names named rebrand rebrands lifts lift picks picked".split(
         " ",
       ),
     );
     const GENERIC_BIZ = new Set(
-      "ai tech big great new global top capex spending server servers spend spends market markets stock stocks data center cloud chip chips silicon semiconductor semiconductors industry sectors sector business businesses group power energy article news update report foregoing".split(
+      "ai tech big great new global top capex spending server servers spend spends market markets stock stocks data center cloud chip chips silicon semiconductor semiconductors memory shortage mania graphics card size locked lock industry sectors sector business businesses group power energy article news update report foregoing".split(
         " ",
       ),
     );
