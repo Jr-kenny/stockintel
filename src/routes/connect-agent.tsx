@@ -68,6 +68,40 @@ function ConnectAgent() {
           Read-only, no key needed.
         </p>
 
+        <section className="mt-10 rounded-md border border-border bg-card p-6 sm:p-8" aria-labelledby="quickstart">
+          <p className="label-mono text-signal">Quickstart</p>
+          <h2 id="quickstart" className="mt-3 font-display text-2xl">
+            Your agent can read the market in one request
+          </h2>
+          <p className="mt-3 max-w-2xl text-base leading-relaxed text-muted-foreground">
+            Plain HTTP, JSON in, JSON out. Install the skill and any Agent OS client, Claude
+            Code, Codex, ChatGPT, can call it by name.
+          </p>
+          <div className="mt-6 space-y-4">
+            <div className="rounded-sm border border-border bg-background p-4">
+              <p className="label-mono text-muted-foreground">1, a live market read</p>
+              <pre className="mt-2 overflow-x-auto font-mono text-xs leading-relaxed">
+{`curl -s -X POST https://stockintelislive.vercel.app/api/market/read \\
+  -H "Content-Type: application/json" -d '{"tickers":["NVDA"]}'`}
+              </pre>
+            </div>
+            <div className="rounded-sm border border-border bg-background p-4">
+              <p className="label-mono text-muted-foreground">2, the thesis behind it</p>
+              <pre className="mt-2 overflow-x-auto font-mono text-xs leading-relaxed">
+{`curl -s -X POST https://stockintelislive.vercel.app/api/market/assess \\
+  -H "Content-Type: application/json" -d '{"ticker":"NVDA"}'`}
+              </pre>
+            </div>
+            <div className="rounded-sm border border-border bg-background p-4">
+              <p className="label-mono text-muted-foreground">3, or run it as an MCP server, beside Binance's own</p>
+              <pre className="mt-2 overflow-x-auto font-mono text-xs leading-relaxed">
+{`claude mcp add binance-mcp-server --transport http https://agent.binance.com/mcp/agentic
+claude mcp add stockintel --transport http https://stockintelislive.vercel.app/mcp`}
+              </pre>
+            </div>
+          </div>
+        </section>
+
         <div className="mt-12 grid gap-4 sm:grid-cols-2">
           {clients.map((c) => (
             <div key={c.name} className="rounded-md border border-border bg-card p-5">
