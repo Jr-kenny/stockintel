@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-09-06 — Connect-agent page
+
+- Connect your agent is its own page at /connect-agent now, third button under How the loop works on the landing hero. How-it-works links out to it. Verified 200 on prod.
+
 ## 2026-09-06 — Connect-your-agent guides
 
 - How-it-works page carries a connect-your-agent section now: per-client setup for Claude Code, VS Code, Cursor, ChatGPT and Codex, plus what each of the nine tools does. README has the same in short form.
