@@ -26,9 +26,11 @@ Option 1, MCP client (full Agent OS session):
 
 Option 2, in-app connect (per workspace):
 
-1. Sign in on `/app`, then press Connect Agent OS on any market check card.
-2. Authorize read-only scopes on Binance. The callback stores the workspace token and returns to `/app`.
-3. Press Disconnect anytime to revoke. Expiry refreshes once automatically, then asks again.
+1. Sign in on `/app`. A prompt explains the link: read-only market data plus read-only account, no trading, disconnect anytime.
+2. Press Authorise to approve on Binance, or Cancel to keep running unconnected.
+3. Back in the app, detected holdings show with every box ticked. Untick to reject, import the rest. Imports land on the watchlist tagged Agent OS.
+4. The prompt never nags twice, and Connect Binance OS stays beside Rename and Sign out in the workspace menu.
+5. Every later run folds the watchlist into the market snapshot and speaks to held positions directly.
 
 Option 3, headless probe (no browser):
 

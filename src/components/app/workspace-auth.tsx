@@ -1,6 +1,79 @@
 import { usePrivy, useLoginWithOAuth, useLoginWithPasskey } from "@privy-io/react-auth";
 import { useEffect, useState, type ComponentType } from "react";
 import { DiscordIcon, FarcasterIcon, GithubIcon, GoogleIcon, XIcon } from "./provider-icons";
+import { beginAgentOsConnect, disconnectAgentOs, getAgentOsStatus } from "@/lib/binance/fns";
+
+/** Persistent Agent OS entry beside Rename and Sign out. */
+function BinanceRow({ identity }: { identity: string }) {
+  const [connected, setConnected] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getAgentOsStatus({ data: { identity } })
+      .then((s) => {
+        if (!cancelled) setConnected(s.connected);
+      })
+      .catch(() => {
+        if (!cancelled) setConnected(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [identity]);
+
+  if (connected === null) return null;
+
+  if (!connected) {
+    const connect = () => {
+      if (busy) return;
+      setBusy(true);
+      void beginAgentOsConnect({ data: { identity } })
+        .then(({ url }) => {
+          window.location.href = url;
+        })
+        .catch(() => setBusy(false));
+    };
+    return (
+      <div className="mt-1.5">
+        <button
+          type="button"
+          onClick={connect}
+          disabled={busy}
+          className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-signal underline-offset-2 hover:underline disabled:opacity-60"
+        >
+          {busy ? "Redirecting" : "Connect Binance OS"}
+        </button>
+      </div>
+    );
+  }
+
+  const disconnect = () => {
+    if (busy) return;
+    setBusy(true);
+    void disconnectAgentOs({ data: { identity } })
+      .then(() => setConnected(false))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <div className="mt-1.5 flex items-center gap-2">
+      <span className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-verified">
+        Binance OS · Live
+      </span>
+      <span aria-hidden="true" className="font-mono text-[0.62rem] text-ink-muted">
+        ·
+      </span>
+      <button
+        type="button"
+        onClick={disconnect}
+        disabled={busy}
+        className="font-mono text-[0.62rem] text-ink-muted underline-offset-2 hover:text-signal hover:underline disabled:opacity-60"
+      >
+        Disconnect
+      </button>
+    </div>
+  );
+}
 
 /**
  * Social sign-in row. Google/GitHub/Discord/X go straight to their OAuth
@@ -198,7 +271,9 @@ export function WorkspaceAuth() {
         >
           Rename
         </button>
-        <span aria-hidden="true" className="font-mono text-[0.62rem] text-ink-muted">·</span>
+        <span aria-hidden="true" className="font-mono text-[0.62rem] text-ink-muted">
+          ·
+        </span>
         <button
           type="button"
           onClick={() => logout()}
@@ -207,7 +282,7 @@ export function WorkspaceAuth() {
           Sign out
         </button>
       </div>
+      {(email ?? wallet) && <BinanceRow identity={(email ?? wallet) as string} />}
     </div>
   );
 }
-

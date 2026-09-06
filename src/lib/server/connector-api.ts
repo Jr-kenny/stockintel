@@ -109,7 +109,7 @@ async function binanceStatus(url: URL): Promise<Response> {
   const state = identity ? await binanceConnectStatus(identity) : { connected: false };
   const token = await resolveAgentOsToken(identity);
   const probe = await agentOsStatus(token);
-  return json({ origin: appOrigin(), identity, ...state, probe });
+  return json({ origin: appOrigin(), identity, ...state, probe, canConnect: !!identity });
 }
 
 async function binanceConnect(request: Request): Promise<Response> {
@@ -165,7 +165,11 @@ async function binanceDisconnect(request: Request): Promise<Response> {
     return json({ error: "Validation failed", issues: parsed.error.issues }, 400);
   }
   const { disconnectBinance } = await import("@/lib/binance/oauth");
-  await disconnectBinance(parsed.data.identity);
+  try {
+    await disconnectBinance(parsed.data.identity);
+  } catch (err) {
+    return json({ error: err instanceof Error ? err.message : "Disconnect failed" }, 403);
+  }
   return json({ disconnected: true });
 }
 

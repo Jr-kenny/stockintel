@@ -5,7 +5,12 @@ import { chatJson, computeRouterConfig } from "@/lib/0g/compute-router";
 import { chatJsonOpenRouter, openRouterConfig } from "@/lib/llm/openrouter";
 import { chatJsonZen, zenConfig } from "@/lib/llm/zen";
 import { guidedSystem } from "./soul";
-import { buildMarketSnapshot, companyTickers, companyToTicker, extractTicker } from "@/lib/binance/market";
+import {
+  buildMarketSnapshot,
+  companyTickers,
+  companyToTicker,
+  extractTicker,
+} from "@/lib/binance/market";
 import { getKlines, marketTest, positioningGauge } from "@/lib/binance/market-test";
 import { getQuotes } from "@/lib/binance/market";
 import { sourceClusterKey } from "./grade";
@@ -72,8 +77,6 @@ type ReadoutEntry = {
   contributingAgents: string[];
 };
 
-
-
 function normalizeCompany(name: string): string {
   return name
     .toLowerCase()
@@ -83,7 +86,11 @@ function normalizeCompany(name: string): string {
 }
 
 /** Deterministic market verdict from real gauge numbers. No guessing. */
-export function marketVerdict(facts: MarketFacts, confidence: number, independentSources = 0): {
+export function marketVerdict(
+  facts: MarketFacts,
+  confidence: number,
+  independentSources = 0,
+): {
   verdict: string;
   marketCall: string;
   timeframe: string;
@@ -161,8 +168,8 @@ function isHeadlineName(name: string): boolean {
   )
     return true;
   const tailPossessive = /\u2019s$|'s$/i.test(words[words.length - 1] ?? "");
-      if (words.length > 1 && tailPossessive) return true;
-      const tokens = words.map((t) => t.toLowerCase().replace(/[^a-z]/g, ""));
+  if (words.length > 1 && tailPossessive) return true;
+  const tokens = words.map((t) => t.toLowerCase().replace(/[^a-z]/g, ""));
   if (tokens.some((t) => HEADLINE_VERBS.has(t))) return true;
   if (tokens.length > 0 && tokens.every((t) => GENERIC_BIZ.has(t))) return true;
   return false;
@@ -174,7 +181,13 @@ function fallbackSynthesis(
 ): Synthesis {
   const merged = new Map<
     string,
-    { name: string; confidence: number; sources: SynthesisSource[]; claim: string; independentSources: number }
+    {
+      name: string;
+      confidence: number;
+      sources: SynthesisSource[];
+      claim: string;
+      independentSources: number;
+    }
   >();
   for (const e of entries) {
     if (isHeadlineName(e.company)) continue;
@@ -182,7 +195,10 @@ function fallbackSynthesis(
     const existing = merged.get(key);
     if (existing) {
       existing.confidence = Math.max(existing.confidence, e.confidence);
-      existing.independentSources = Math.max(existing.independentSources, e.independentSources ?? 0);
+      existing.independentSources = Math.max(
+        existing.independentSources,
+        e.independentSources ?? 0,
+      );
       for (const s of e.sources) {
         if (!existing.sources.some((x) => x.url === s.url)) existing.sources.push(s);
       }
@@ -212,10 +228,7 @@ function fallbackSynthesis(
   // asking the watcher to. Link flavor follows the claim type, the fallback
   // argument follows scale and installed base, and every path names what
   // would break it.
-  function exposurePath(
-    claim: string,
-    ticker: string,
-  ): { link: string; invalidate: string } {
+  function exposurePath(claim: string, ticker: string): { link: string; invalidate: string } {
     const c = claim.toLowerCase();
     if (/capex|guidance|budget|spending|invest|funding|raise|\bbillion\b|\bmillion\b/.test(c))
       return {
@@ -227,7 +240,11 @@ function fallbackSynthesis(
         link: `Contracts decide who gets paid first. The read is whether ${ticker} or its partners sit anywhere in this order chain.`,
         invalidate: `This breaks if the order book bypasses ${ticker} entirely.`,
       };
-    if (/build|expand|expansion|construction|plant|fab|data center|datacenter|facility|capacity/.test(c))
+    if (
+      /build|expand|expansion|construction|plant|fab|data center|datacenter|facility|capacity/.test(
+        c,
+      )
+    )
       return {
         link: `Buildouts at this scale need compute to fill them, and buyers fall back to ${ticker} when capacity has to ship on time.`,
         invalidate: `This breaks if the build stalls or fills with rival silicon.`,
@@ -248,14 +265,15 @@ function fallbackSynthesis(
       const sourceSite = m.sources[0]?.label ?? "a source";
       const rawFound = m.claim.trim();
       const found = /^We found/i.test(rawFound) ? rawFound : `We found ${rawFound}`;
-      const foundClean = found.replace(/^We found that We found/i, "We found").replace(/^We found that /i, "We found ");
+      const foundClean = found
+        .replace(/^We found that We found/i, "We found")
+        .replace(/^We found that /i, "We found ");
       const titleSnippet = rawFound.replace(/^We found\s+/i, "").slice(0, 86);
       const ticker =
         companyTickers(m.name).find((t) => marketByTicker.has(t)) ??
         companyToTicker(m.name) ??
         extractTicker(m.name);
-      const facts =
-        marketByTicker.get(ticker) ??
+      const facts = marketByTicker.get(ticker) ??
         marketByTicker.get(m.name) ?? {
           symbol: null,
           price: null,
@@ -340,61 +358,65 @@ function coerceSynthesis(
   const synthesis: Synthesis = {
     preamble: typeof parsed.preamble === "string" ? parsed.preamble : "",
     recommendations: normalizeRecs(parsed.recommendations)
-          .filter((r) => r && typeof r.company === "string" && typeof r.body === "string")
-          .map((r) => {
-            const company = r.company;
-            const ticker =
-              companyTickers(company).find((t) => marketByTicker.has(t)) ??
-              companyToTicker(company) ??
-              extractTicker(company);
-            const facts = marketByTicker.get(ticker) ?? marketByTicker.get(company);
-            const match = withSources.find(
-              (e) => normalizeCompany(e.company) === normalizeCompany(company),
-            );
-            const entryConf = match?.confidence;
-            const rawConf = Number.isFinite(r.confidence) ? Math.round(r.confidence) : NaN;
-            const confidence =
-              Number.isFinite(rawConf) && (rawConf as number) >= 10 && (rawConf as number) <= 100
-                ? (rawConf as number)
-                : typeof entryConf === "number"
-                  ? Math.round(entryConf)
-                  : 60;
-            const fallbackCall = facts
-              ? marketVerdict(facts, confidence, match?.independentSources ?? 0)
-              : { verdict: "unclear", marketCall: "No market snapshot available.", timeframe: "unclear, needs confirmation" };
-            const verdict =
-              typeof (r as { verdict?: unknown }).verdict === "string" &&
-              ["underpriced", "priced", "unclear"].includes((r as { verdict: string }).verdict)
-                ? (r as { verdict: string }).verdict
-                : fallbackCall.verdict;
-            const rawCall =
-              typeof (r as { marketCall?: unknown }).marketCall === "string"
-                ? (r as { marketCall: string }).marketCall
-                : "";
-            // Never ship buy/sell orders as the market call.
-            const marketCall =
-              rawCall.length > 10 && !/^(buy|sell|long|short)\b/i.test(rawCall.trim())
-                ? rawCall
-                : fallbackCall.marketCall;
-            const timeframe =
-              typeof (r as { timeframe?: unknown }).timeframe === "string" &&
-              ((r as { timeframe: string }).timeframe?.length ?? 0) > 2
-                ? (r as { timeframe: string }).timeframe
-                : fallbackCall.timeframe;
-            return {
-              company,
-              title: typeof r.title === "string" ? r.title : company,
-              body: r.body,
-              confidence,
-              verdict,
-              marketCall,
-              timeframe,
-              ...(facts ? { marketLines: facts.lines.slice(0, 5) } : {}),
-            sources: Array.isArray(r.sources)
-              ? r.sources.filter((s) => s && typeof s.url === "string").slice(0, 4)
-              : [],
-          };
-          }),
+      .filter((r) => r && typeof r.company === "string" && typeof r.body === "string")
+      .map((r) => {
+        const company = r.company;
+        const ticker =
+          companyTickers(company).find((t) => marketByTicker.has(t)) ??
+          companyToTicker(company) ??
+          extractTicker(company);
+        const facts = marketByTicker.get(ticker) ?? marketByTicker.get(company);
+        const match = withSources.find(
+          (e) => normalizeCompany(e.company) === normalizeCompany(company),
+        );
+        const entryConf = match?.confidence;
+        const rawConf = Number.isFinite(r.confidence) ? Math.round(r.confidence) : NaN;
+        const confidence =
+          Number.isFinite(rawConf) && (rawConf as number) >= 10 && (rawConf as number) <= 100
+            ? (rawConf as number)
+            : typeof entryConf === "number"
+              ? Math.round(entryConf)
+              : 60;
+        const fallbackCall = facts
+          ? marketVerdict(facts, confidence, match?.independentSources ?? 0)
+          : {
+              verdict: "unclear",
+              marketCall: "No market snapshot available.",
+              timeframe: "unclear, needs confirmation",
+            };
+        const verdict =
+          typeof (r as { verdict?: unknown }).verdict === "string" &&
+          ["underpriced", "priced", "unclear"].includes((r as { verdict: string }).verdict)
+            ? (r as { verdict: string }).verdict
+            : fallbackCall.verdict;
+        const rawCall =
+          typeof (r as { marketCall?: unknown }).marketCall === "string"
+            ? (r as { marketCall: string }).marketCall
+            : "";
+        // Never ship buy/sell orders as the market call.
+        const marketCall =
+          rawCall.length > 10 && !/^(buy|sell|long|short)\b/i.test(rawCall.trim())
+            ? rawCall
+            : fallbackCall.marketCall;
+        const timeframe =
+          typeof (r as { timeframe?: unknown }).timeframe === "string" &&
+          ((r as { timeframe: string }).timeframe?.length ?? 0) > 2
+            ? (r as { timeframe: string }).timeframe
+            : fallbackCall.timeframe;
+        return {
+          company,
+          title: typeof r.title === "string" ? r.title : company,
+          body: r.body,
+          confidence,
+          verdict,
+          marketCall,
+          timeframe,
+          ...(facts ? { marketLines: facts.lines.slice(0, 5) } : {}),
+          sources: Array.isArray(r.sources)
+            ? r.sources.filter((s) => s && typeof s.url === "string").slice(0, 4)
+            : [],
+        };
+      }),
   };
   // Never lose the receipts: if the model dropped sources, re-attach them.
   for (const rec of synthesis.recommendations) {
@@ -465,7 +487,8 @@ function salvagePreamble(content: string): string {
   }
 }
 
-export async function synthesizeInquiry(inquiryId: string): Promise<void> {  await ensureSchema();
+export async function synthesizeInquiry(inquiryId: string): Promise<void> {
+  await ensureSchema();
   const [inquiry] = await db.select().from(inquiries).where(eq(inquiries.id, inquiryId));
   if (!inquiry || !inquiry.readoutJson) return;
   const inquiryQuestion: string = inquiry.question;
@@ -521,14 +544,40 @@ export async function synthesizeInquiry(inquiryId: string): Promise<void> {  awa
   // Live market check (Binance Agent OS data): snapshot plus positioning gauge.
   // This is the product. It runs first and every thesis path below carries it.
   let marketBlock = "MARKET SNAPSHOT: unavailable (no Binance listing matched).";
-  const marketByCompany = new Map<string, { symbol: string; price: number; change24hPct: number }>();
+  const marketByCompany = new Map<
+    string,
+    { symbol: string; price: number; change24hPct: number }
+  >();
   const marketByTicker = new Map<string, MarketFacts>();
-  let marketPersist: { at: string; lines: string[]; byCompany: Record<string, { symbol: string; price: number; change24hPct: number }>; source: "agent-os" | "mirror" } | null = null;
+  let marketPersist: {
+    at: string;
+    lines: string[];
+    byCompany: Record<string, { symbol: string; price: number; change24hPct: number }>;
+    source: "agent-os" | "mirror";
+  } | null = null;
   try {
+    // The workspace watchlist rides along so research reads against what
+    // the watcher holds. Fail open: no watchlist still runs the full check.
+    let watchTickers: string[] = [];
+    try {
+      if (inquiry.identity) {
+        const { supplyRecords } = await import("@/lib/db/schema");
+        const rows = await db
+          .select()
+          .from(supplyRecords)
+          .where(eq(supplyRecords.identity, inquiry.identity));
+        watchTickers = Array.from(
+          new Set(rows.map((r) => extractTicker(r.name)).filter(Boolean)),
+        ).slice(0, 20);
+      }
+    } catch {
+      watchTickers = [];
+    }
     const snapshot = await buildMarketSnapshot(
       withSources.map((e) => e.company),
       inquiry.question,
       inquiry.identity,
+      watchTickers,
     );
     for (const [k, v] of snapshot.byCompany) marketByCompany.set(k, v);
     marketPersist = {
@@ -538,7 +587,7 @@ export async function synthesizeInquiry(inquiryId: string): Promise<void> {  awa
       source: snapshot.source,
     };
     if (snapshot.lines.length > 0) {
-      marketBlock = `MARKET SNAPSHOT (live, Binance, 24h):\n${snapshot.lines.join("\n")}\nUse this as the market test: compare event freshness against the observed move. A fresh strong chain with a small move suggests underpriced; a large move already reflecting the event suggests priced.`;
+      marketBlock = `MARKET SNAPSHOT (live, Binance, 24h):\n${snapshot.lines.join("\n")}\nUse this as the market test: compare event freshness against the observed move. A fresh strong chain with a small move suggests underpriced; a large move already reflecting the event suggests priced. Lines marked in your watchlist are what the watcher holds: speak to each thesis through that position, what it means for it and what would invalidate it.`;
     }
     const tickers: string[] = [];
     const qTick = extractTicker(inquiry.question.replace(/^watch\s+/i, ""));
@@ -546,6 +595,9 @@ export async function synthesizeInquiry(inquiryId: string): Promise<void> {  awa
     for (const name of withSources.map((e) => e.company)) {
       const mapped = companyToTicker(name);
       if (mapped && !tickers.includes(mapped)) tickers.push(mapped);
+    }
+    for (const t of watchTickers) {
+      if (!tickers.includes(t)) tickers.push(t);
     }
     const { agentOsTokenFor } = await import("@/lib/binance/agent-os");
     const mcpToken = await agentOsTokenFor(inquiry.identity);
@@ -565,7 +617,7 @@ export async function synthesizeInquiry(inquiryId: string): Promise<void> {  awa
         });
         continue;
       }
-      let facts: MarketFacts = {
+      const facts: MarketFacts = {
         symbol: q.symbol,
         price: q.price,
         change24hPct: q.change24hPct ?? 0,
@@ -574,7 +626,9 @@ export async function synthesizeInquiry(inquiryId: string): Promise<void> {  awa
         wobble: null,
         stretched: false,
         compressed: false,
-        lines: [`${q.ticker} (${q.symbol}): $${q.price.toFixed(2)} (${(q.change24hPct ?? 0) >= 0 ? "+" : ""}${(q.change24hPct ?? 0).toFixed(2)}% 24h)`],
+        lines: [
+          `${q.ticker} (${q.symbol}): $${q.price.toFixed(2)} (${(q.change24hPct ?? 0) >= 0 ? "+" : ""}${(q.change24hPct ?? 0).toFixed(2)}% 24h)`,
+        ],
       };
       try {
         const candles = await getKlines(q.symbol, 120, mcpToken);
@@ -621,7 +675,9 @@ export async function synthesizeInquiry(inquiryId: string): Promise<void> {  awa
   const marketShort = marketBlock.slice(0, 800);
   const userPrompt = `WATCH:\n${inquiry.question.slice(0, 200)}\nEVIDENCE:\n${compact
     .map((p) => JSON.stringify(p))
-    .join("\n")}\n${marketShort}\nWrite the readout. Every item MUST have verdict, marketCall with numbers, timeframe.`;
+    .join(
+      "\n",
+    )}\n${marketShort}\nWrite the readout. Every item MUST have verdict, marketCall with numbers, timeframe.`;
   synthesis = fallbackSynthesis(inquiry.question, withSources, marketByTicker);
   let lastError = "router not attempted";
   let wroteThesis = false;
@@ -674,7 +730,8 @@ Example: {"preamble":"...","recommendations":[{"company":"NVIDIA","title":"...",
         timeoutMs: 60_000,
       });
       const parsed = coerceSynthesis(result.content, withSources, marketByTicker);
-      if (parsed.recommendations.length === 0) throw new Error(`${label} returned zero recommendations`);
+      if (parsed.recommendations.length === 0)
+        throw new Error(`${label} returned zero recommendations`);
       synthesis = withBackfill(parsed);
       return true;
     } catch (error) {
@@ -717,7 +774,12 @@ Example: {"preamble":"...","recommendations":[{"company":"NVIDIA","title":"...",
   if (openRouter.live) {
     for (let attempt = 0; attempt < 2 && !wroteThesis; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, 3000));
-      wroteThesis = await attemptThesis(chatJsonOpenRouter, "openrouter", attempt === 0 ? 0.3 : 0.6, thesisSystem);
+      wroteThesis = await attemptThesis(
+        chatJsonOpenRouter,
+        "openrouter",
+        attempt === 0 ? 0.3 : 0.6,
+        thesisSystem,
+      );
     }
     if (!wroteThesis) console.error("OpenRouter thesis failed, trying 0G:", lastError);
   }
@@ -731,7 +793,12 @@ Example: {"preamble":"...","recommendations":[{"company":"NVIDIA","title":"...",
   if (!wroteThesis && zen.live) {
     for (let attempt = 0; attempt < 2 && !wroteThesis; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, 3000));
-      wroteThesis = await attemptThesis(chatJsonZen, "zen", attempt === 0 ? 0.3 : 0.6, thesisSystem);
+      wroteThesis = await attemptThesis(
+        chatJsonZen,
+        "zen",
+        attempt === 0 ? 0.3 : 0.6,
+        thesisSystem,
+      );
     }
     if (!wroteThesis) console.error("Zen thesis failed:", lastError);
   }

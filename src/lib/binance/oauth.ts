@@ -112,7 +112,7 @@ export function clientMetadataDoc(): Record<string, unknown> {
 const b64u = (buf: Buffer): string =>
   buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
-/** Start a connect flow. Returns the Binance authorize URL to redirect to. */
+/** Start a connect flow. Any signed-in workspace can link its own sub-account. */
 export async function beginBinanceConnect(identity: string): Promise<{ url: string }> {
   await ensureSchema();
   const verifier = b64u(randomBytes(32));
@@ -202,31 +202,40 @@ export async function completeBinanceConnect(
   return { identity: row.identity };
 }
 
-/** Usable workspace token, or the global env token, or null. */
+/** Token stored for one workspace only. No env, no fallback. */
+export async function workspaceTokenFor(identity: string): Promise<string | null> {
+  try {
+    await ensureSchema();
+    const [row] = await db.select().from(binanceTokens).where(eq(binanceTokens.identity, identity));
+    if (row?.accessToken) {
+      if (!row.expiresAt || Date.parse(row.expiresAt) > Date.now() + 60_000) {
+        return row.accessToken;
+      }
+      // Expired but refreshable: one best-effort refresh, then fall through.
+      if (row.refreshToken) {
+        const refreshed = await refreshAgentOsToken(identity, row.refreshToken).catch(() => null);
+        if (refreshed) return refreshed;
+      }
+    }
+  } catch {
+    // fall through to null
+  }
+  return null;
+}
+
+/**
+ * Usable market token: this workspace first, then the global env token.
+ * Each workspace links its own Agentic sub-account. Self-hosters set one
+ * BINANCE_MCP_TOKEN instead and every readout carries live context.
+ */
 export async function resolveAgentOsToken(identity?: string | null): Promise<string | null> {
   if (identity) {
-    try {
-      await ensureSchema();
-      const [row] = await db
-        .select()
-        .from(binanceTokens)
-        .where(eq(binanceTokens.identity, identity));
-      if (row?.accessToken) {
-        if (!row.expiresAt || Date.parse(row.expiresAt) > Date.now() + 60_000) {
-          return row.accessToken;
-        }
-        // Expired but refreshable: one best-effort refresh, then fall through.
-        if (row.refreshToken) {
-          const refreshed = await refreshAgentOsToken(identity, row.refreshToken).catch(() => null);
-          if (refreshed) return refreshed;
-        }
-      }
-    } catch {
-      // fall through to env token, then mirror
-    }
+    const own = await workspaceTokenFor(identity);
+    if (own) return own;
   }
   const env = process.env["BINANCE_MCP_TOKEN"]?.trim();
-  return env && env.length > 10 ? env : null;
+  if (env && env.length > 10) return env;
+  return null;
 }
 
 /** Best-effort refresh of an expired workspace token. Returns the new token or null. */

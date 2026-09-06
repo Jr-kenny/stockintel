@@ -1,5 +1,6 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { AppShell } from "@/components/app/AppShell";
+import { AgentOsPrompt } from "@/components/app/agent-os-prompt";
 
 export const Route = createFileRoute("/app")({
   head: () => ({
@@ -15,6 +16,7 @@ export const Route = createFileRoute("/app")({
   }),
   component: () => (
     <AppShell>
+      <AgentOsPrompt />
       <Outlet />
     </AppShell>
   ),

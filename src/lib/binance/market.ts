@@ -189,7 +189,9 @@ export async function resolveQuote(
     if (hit.value) lastQuoteSource = cacheKey.endsWith("|aos") ? "agent-os" : "mirror";
     return hit.value;
   }
-  const candidates = key.endsWith("B") ? [`${key}USDT`, `${key.slice(0, -1)}BUSDT`] : [`${key}BUSDT`, `${key}USDT`];
+  const candidates = key.endsWith("B")
+    ? [`${key}USDT`, `${key.slice(0, -1)}BUSDT`]
+    : [`${key}BUSDT`, `${key}USDT`];
   let value: Resolved | null = null;
   for (const symbol of candidates) {
     value = await fetch24hr(symbol, mcpToken);
@@ -200,12 +202,21 @@ export async function resolveQuote(
 }
 
 export async function getQuotes(tickers: string[], mcpToken?: string | null): Promise<Quote[]> {
-  const unique = Array.from(new Set(tickers.map((t) => t.toUpperCase()).filter(Boolean))).slice(0, 20);
+  const unique = Array.from(new Set(tickers.map((t) => t.toUpperCase()).filter(Boolean))).slice(
+    0,
+    20,
+  );
   return Promise.all(
     unique.map(async (ticker) => {
       const r = await resolveQuote(ticker, mcpToken);
       return r
-        ? { ticker, symbol: r.symbol, price: r.price, change24hPct: r.change24hPct, volume24hQuote: r.volume24hQuote }
+        ? {
+            ticker,
+            symbol: r.symbol,
+            price: r.price,
+            change24hPct: r.change24hPct,
+            volume24hQuote: r.volume24hQuote,
+          }
         : { ticker, symbol: null, price: null, change24hPct: null, volume24hQuote: null };
     }),
   );
@@ -216,12 +227,19 @@ export type CompanyMarket = { symbol: string; price: number; change24hPct: numbe
 /**
  * The live market check for a readout: map assessed companies to tickers,
  * snapshot Binance prices. Advisory only — throws nothing, resolves nulls.
+ * Watchlist tickers ride along so the thesis reads against what the
+ * workspace holds, and held lines say so out loud.
  */
 export async function buildMarketSnapshot(
   companies: string[],
   question: string,
   identity?: string | null,
-): Promise<{ lines: string[]; byCompany: Map<string, CompanyMarket>; source: "agent-os" | "mirror" }> {
+  holdings: string[] = [],
+): Promise<{
+  lines: string[];
+  byCompany: Map<string, CompanyMarket>;
+  source: "agent-os" | "mirror";
+}> {
   const { agentOsTokenFor } = await import("./agent-os");
   const mcpToken = await agentOsTokenFor(identity ?? null);
   const tickers = new Set<string>();
@@ -237,16 +255,26 @@ export async function buildMarketSnapshot(
   }
   const qTick = extractTicker(question.replace(/^watch\s+/i, ""));
   if (qTick) tickers.add(qTick);
+  const held = new Set(
+    holdings.map((t) => t.toUpperCase()).filter((t) => t.length >= 1 && t.length <= 12),
+  );
+  for (const t of held) tickers.add(t);
   const byCompany = new Map<string, CompanyMarket>();
   const lines: string[] = [];
   lastQuoteSource = "mirror";
-  // Read-only account context via Agent OS when authorized (positions inside
-  // the permissioned Agentic sub-account). Never blocks the snapshot.
+  // Read-only account context only from the caller's own authorization:
+  // their workspace token, or the shared self-host key. One workspace
+  // never sees another workspace's balances in its readout.
   let accountLines: string[] = [];
   if (mcpToken) {
     try {
-      const { agentOsAccount } = await import("./agent-os");
-      accountLines = (await agentOsAccount(mcpToken)).lines;
+      const { workspaceTokenFor } = await import("./oauth");
+      const own = identity ? await workspaceTokenFor(identity) : null;
+      const env = process.env["BINANCE_MCP_TOKEN"]?.trim();
+      if (own || (env && env.length > 10)) {
+        const { agentOsAccount } = await import("./agent-os");
+        accountLines = (await agentOsAccount(mcpToken)).lines;
+      }
     } catch {
       // account scope not granted; prices still flow
     }
@@ -259,7 +287,10 @@ export async function buildMarketSnapshot(
       continue;
     }
     const pct = q.change24hPct ?? 0;
-    lines.push(`${q.ticker} (${q.symbol}): $${q.price.toFixed(2)} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}% 24h)`);
+    const heldMark = held.has(q.ticker) ? " · in your watchlist" : "";
+    lines.push(
+      `${q.ticker} (${q.symbol}): $${q.price.toFixed(2)} (${pct >= 0 ? "+" : ""}${pct.toFixed(2)}% 24h)${heldMark}`,
+    );
     for (const name of companies) {
       if (companyTickers(name).includes(q.ticker)) {
         byCompany.set(name, { symbol: q.symbol, price: q.price, change24hPct: pct });
