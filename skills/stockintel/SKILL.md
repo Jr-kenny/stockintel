@@ -23,7 +23,7 @@ claude mcp add binance-mcp-server --transport http https://agent.binance.com/mcp
 claude mcp add stockintel --transport http https://stockintel-eight.vercel.app/mcp
 ```
 
-Then call `stockintel_read` and `stockintel_status`.
+Then call `stockintel_read`, `stockintel_assess`, `stockintel_clusters`, `stockintel_status`. Ask for the thesis with `stockintel_assess`, for grouped evidence without verdicts with `stockintel_clusters`.
 
 **When both servers are connected, fetch the market leg first.** Call your Binance market-data tools for the tickers, then pass those results verbatim into `stockintel_read` as `binance_market_data`. StockIntel reads price and 24h change out of them and marks that leg caller-supplied. Omit it and StockIntel resolves the same public numbers itself through Agent OS or the mirror.
 
@@ -35,6 +35,8 @@ Then call `stockintel_read` and `stockintel_status`.
 |---|---|
 | Market read on tickers | `POST /api/market/read` `{"tickers":["NVDA","MU"]}` |
 | Read with your own exchange leg | `POST /api/market/read` `{"tickers":["BTC"],"binance_market_data":{...}}` |
+| Full thesis for a ticker | `POST /api/market/assess` `{"ticker":"NVDA"}` |
+| Evidence clusters without verdicts | `POST /api/market/clusters` `{"ticker":"NVDA"}` |
 | Is StockIntel live on Agent OS | `GET /api/binance/status` |
 
 ```bash

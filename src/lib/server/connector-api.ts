@@ -87,6 +87,12 @@ export async function handleConnectorApi(request: Request): Promise<Response> {
   if (request.method === "POST" && url.pathname === "/api/market/read") {
     return marketReadRoute(request);
   }
+  if (request.method === "POST" && url.pathname === "/api/market/assess") {
+    return marketAssessRoute(request);
+  }
+  if (request.method === "POST" && url.pathname === "/api/market/clusters") {
+    return marketClustersRoute(request);
+  }
   return json({ error: "Not found" }, 404);
 }
 
@@ -105,12 +111,39 @@ const marketReadSchema = z.object({
   identity: z.string().min(1).max(160).optional(),
 });
 
-/**
- * Call method for outside agents. Live market read for up to 20 tickers:
- * price, 24h move, volume, and the positioning gauge behind each line.
- * Pass your own Binance MCP tool output as binance_market_data and that
- * leg reports provenance caller-supplied. Needs no key.
- */
+const tickerSchema = z.object({ ticker: z.string().min(1).max(12) });
+
+/** Full thesis for a ticker from the latest completed investigation. */
+async function marketAssessRoute(request: Request): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Invalid JSON" }, 400);
+  }
+  const parsed = tickerSchema.safeParse(body);
+  if (!parsed.success) {
+    return json({ error: "Validation failed", issues: parsed.error.issues }, 400);
+  }
+  const { agentAssess } = await import("@/lib/orchestrator/agent-read");
+  return json(await agentAssess(parsed.data.ticker));
+}
+
+/** Cluster results only for a ticker: grouped evidence, no thesis. */
+async function marketClustersRoute(request: Request): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Invalid JSON" }, 400);
+  }
+  const parsed = tickerSchema.safeParse(body);
+  if (!parsed.success) {
+    return json({ error: "Validation failed", issues: parsed.error.issues }, 400);
+  }
+  const { agentClusters } = await import("@/lib/orchestrator/agent-read");
+  return json(await agentClusters(parsed.data.ticker));
+}
 async function marketReadRoute(request: Request): Promise<Response> {
   let body: unknown;
   try {

@@ -134,6 +134,69 @@ export function buildStockintelMcpServer(): McpServer {
     },
   );
 
+  server.registerTool(
+    "stockintel_assess",
+    {
+      title: "Thesis assessment",
+      description:
+        "The full StockIntel thesis for a ticker: preamble plus one assessment per exposure with " +
+        "verdict (priced, underpriced, unclear), market call, timeframe, and sources. Served from " +
+        "the latest completed investigation. Read-only, no key needed.",
+      inputSchema: {
+        ticker: z.string().max(12).describe("Ticker to assess, e.g. NVDA."),
+      },
+    },
+    async ({ ticker }) => {
+      const { agentAssess } = await import("@/lib/orchestrator/agent-read");
+      const a = await agentAssess(ticker);
+      const text = a.found
+        ? [
+            a.preamble,
+            ...a.recommendations.map(
+              (r) => `${r.company} (${r.verdict}, ${r.confidence}%): ${r.marketCall} [${r.timeframe}]`,
+            ),
+            `Assessed ${a.assessedAt}.`,
+          ]
+            .filter(Boolean)
+            .join("\n")
+        : `No completed assessment for ${a.ticker} yet. Run a watch in the app first.`;
+      return {
+        content: [{ type: "text" as const, text }],
+        structuredContent: a,
+      };
+    },
+  );
+
+  server.registerTool(
+    "stockintel_clusters",
+    {
+      title: "Evidence clusters",
+      description:
+        "Grouped evidence per exposure for a ticker: claims, independent source count, top claim, " +
+        "sources, and contributing agents. No thesis, no verdicts. Served from the latest completed " +
+        "investigation. Read-only, no key needed.",
+      inputSchema: {
+        ticker: z.string().max(12).describe("Ticker to cluster, e.g. NVDA."),
+      },
+    },
+    async ({ ticker }) => {
+      const { agentClusters } = await import("@/lib/orchestrator/agent-read");
+      const c = await agentClusters(ticker);
+      const text = c.found
+        ? c.clusters
+            .map(
+              (e) =>
+                `${e.company} [${e.confidence}%]: ${e.topClaim} (${e.independentSources} independent sources)`,
+            )
+            .join("\n")
+        : `No completed clusters for ${c.ticker} yet. Run a watch in the app first.`;
+      return {
+        content: [{ type: "text" as const, text }],
+        structuredContent: c,
+      };
+    },
+  );
+
   return server;
 }
 
