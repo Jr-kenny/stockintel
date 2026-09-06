@@ -81,96 +81,60 @@ export async function handleConnectorApi(request: Request): Promise<Response> {
   if (request.method === "GET" && url.pathname === "/api/health") {
     return json({ ok: true, service: "prime-layer-orchestrator" });
   }
-  if (url.pathname === "/api/binance/client-metadata") {
-    const { clientMetadataDoc } = await import("@/lib/binance/oauth");
-    return json(clientMetadataDoc());
-  }
   if (request.method === "GET" && url.pathname === "/api/binance/status") {
-    return binanceStatus(url);
+    return binanceStatus();
   }
-  if (request.method === "POST" && url.pathname === "/api/binance/connect") {
-    return binanceConnect(request);
-  }
-  if (request.method === "GET" && url.pathname === "/api/binance/callback") {
-    return binanceCallback(url);
-  }
-  if (request.method === "POST" && url.pathname === "/api/binance/disconnect") {
-    return binanceDisconnect(request);
+  if (request.method === "POST" && url.pathname === "/api/market/read") {
+    return marketReadRoute(request);
   }
   return json({ error: "Not found" }, 404);
 }
 
-/** Read-only Agent OS connection state plus a non-throwing live probe. */
-async function binanceStatus(url: URL): Promise<Response> {
-  const identity = url.searchParams.get("identity")?.slice(0, 160) || null;
-  const { binanceConnectStatus, resolveAgentOsToken, appOrigin } =
-    await import("@/lib/binance/oauth");
+/** Read-only Agent OS state plus a non-throwing live probe. Needs no key. */
+async function binanceStatus(): Promise<Response> {
+  const { resolveAgentOsToken, appOrigin } = await import("@/lib/binance/oauth");
   const { agentOsStatus } = await import("@/lib/binance/agent-os");
-  const state = identity ? await binanceConnectStatus(identity) : { connected: false };
-  const token = await resolveAgentOsToken(identity);
+  const token = await resolveAgentOsToken(null);
   const probe = await agentOsStatus(token);
-  return json({ origin: appOrigin(), identity, ...state, probe, canConnect: !!identity });
+  return json({ origin: appOrigin(), probe });
 }
 
-async function binanceConnect(request: Request): Promise<Response> {
+const marketReadSchema = z.object({
+  tickers: z.array(z.string().max(40)).min(1).max(20),
+  binance_market_data: z.unknown().optional(),
+  identity: z.string().min(1).max(160).optional(),
+});
+
+/**
+ * Call method for outside agents. Live market read for up to 20 tickers:
+ * price, 24h move, volume, and the positioning gauge behind each line.
+ * Pass your own Binance MCP tool output as binance_market_data and that
+ * leg reports provenance caller-supplied. Needs no key.
+ */
+async function marketReadRoute(request: Request): Promise<Response> {
   let body: unknown;
   try {
     body = await request.json();
   } catch {
     return json({ error: "Invalid JSON" }, 400);
   }
-  const parsed = z.object({ identity: z.string().min(1).max(160) }).safeParse(body);
+  const parsed = marketReadSchema.safeParse(body);
   if (!parsed.success) {
     return json({ error: "Validation failed", issues: parsed.error.issues }, 400);
   }
-  const { beginBinanceConnect } = await import("@/lib/binance/oauth");
+  const { marketRead } = await import("@/lib/binance/read");
   try {
-    const { url } = await beginBinanceConnect(parsed.data.identity);
-    return json({ url });
+    const { quotes } = await marketRead({
+      tickers: parsed.data.tickers,
+      ...(parsed.data.binance_market_data !== undefined
+        ? { marketData: parsed.data.binance_market_data }
+        : {}),
+      ...(parsed.data.identity ? { identity: parsed.data.identity } : {}),
+    });
+    return json({ quotes });
   } catch (err) {
-    return json({ error: err instanceof Error ? err.message : "Connect failed" }, 500);
+    return json({ error: err instanceof Error ? err.message : "Market read failed" }, 500);
   }
-}
-
-/** OAuth redirect target. Finishes the flow, then returns to the app. */
-async function binanceCallback(url: URL): Promise<Response> {
-  const code = url.searchParams.get("code");
-  const state = url.searchParams.get("state");
-  const { completeBinanceConnect, appOrigin } = await import("@/lib/binance/oauth");
-  const home = appOrigin();
-  if (!code || !state) {
-    return Response.redirect(
-      `${home}/app?binance=error&reason=${encodeURIComponent("Missing code or state.")}`,
-      302,
-    );
-  }
-  try {
-    await completeBinanceConnect(code, state);
-    return Response.redirect(`${home}/app?binance=connected`, 302);
-  } catch (err) {
-    const reason = err instanceof Error ? err.message : "Connect failed";
-    return Response.redirect(`${home}/app?binance=error&reason=${encodeURIComponent(reason)}`, 302);
-  }
-}
-
-async function binanceDisconnect(request: Request): Promise<Response> {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return json({ error: "Invalid JSON" }, 400);
-  }
-  const parsed = z.object({ identity: z.string().min(1).max(160) }).safeParse(body);
-  if (!parsed.success) {
-    return json({ error: "Validation failed", issues: parsed.error.issues }, 400);
-  }
-  const { disconnectBinance } = await import("@/lib/binance/oauth");
-  try {
-    await disconnectBinance(parsed.data.identity);
-  } catch (err) {
-    return json({ error: err instanceof Error ? err.message : "Disconnect failed" }, 403);
-  }
-  return json({ disconnected: true });
 }
 
 async function registerAgent(request: Request): Promise<Response> {

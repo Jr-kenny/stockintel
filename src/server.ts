@@ -52,6 +52,12 @@ export default {
     if (url.pathname.startsWith("/api/")) {
       return handleConnectorApi(request);
     }
+    // StockIntel as an MCP server — outside agents add us next to
+    // binance-mcp-server in their own session.
+    if (url.pathname === "/mcp" || url.pathname.startsWith("/mcp/")) {
+      const { handleMcpRequest } = await import("./lib/server/stockintel-mcp");
+      return handleMcpRequest(request);
+    }
 
     try {
       const handler = await getServerEntry();

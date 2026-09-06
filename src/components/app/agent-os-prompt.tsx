@@ -1,24 +1,36 @@
 import { useCallback, useEffect, useState } from "react";
 import { PrivyIdentity, type PrivyIdentityInfo } from "@/components/app/privy-identity";
-import {
-  beginAgentOsConnect,
-  getAgentOsHoldings,
-  getAgentOsStatus,
-  importAgentOsHoldings,
-  type HoldingView,
-} from "@/lib/binance/fns";
+import { importAgentOsHoldings } from "@/lib/binance/fns";
+import { extractTicker } from "@/lib/binance/market";
 
 type Step = "hidden" | "explain" | "picker";
 
 const dismissKey = (identity: string) => `agentos-prompt-dismissed:${identity}`;
 
+type Holding = { ticker: string; label: string };
+
+function detectHoldings(text: string): Holding[] {
+  const seen = new Set<string>();
+  const out: Holding[] = [];
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const ticker = extractTicker(line);
+    if (!ticker || seen.has(ticker)) continue;
+    seen.add(ticker);
+    out.push({ ticker, label: line.slice(0, 90) });
+  }
+  return out.slice(0, 20);
+}
+
 /**
- * Post-login Agent OS prompt, mounted once in the workspace layout.
+ * Post-login holdings prompt, mounted once in the workspace layout.
  *
- * Explain step: what connecting does, Authorize or Cancel. Cancelling
- * dismisses quietly and the run continues unconnected.
- * Picker step: after the authorize redirect returns, detected holdings
- * show with every box ticked. Untick to reject, import what stays ticked.
+ * Binance only recognises its approved agent clients, so there is no
+ * authorize button here. The workspace copies its balances out of its own
+ * Binance tools once, the app detects tickers, every box starts ticked,
+ * untick to reject, import the rest. Cancel dismisses quietly and the run
+ * continues on public data.
  */
 export function AgentOsPrompt() {
   const [privy, setPrivy] = useState<PrivyIdentityInfo>({
@@ -31,88 +43,34 @@ export function AgentOsPrompt() {
   const [step, setStep] = useState<Step>("hidden");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [holdings, setHoldings] = useState<HoldingView[]>([]);
+  const [pasted, setPasted] = useState("");
+  const [holdings, setHoldings] = useState<Holding[]>([]);
   const [checked, setChecked] = useState<Set<string>>(new Set());
 
-  const cleanUrl = useCallback(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (!params.get("binance")) return null;
-    const result = params.get("binance");
-    const reason = params.get("reason");
-    params.delete("binance");
-    params.delete("reason");
-    const rest = params.toString();
-    window.history.replaceState(null, "", `${window.location.pathname}${rest ? `?${rest}` : ""}`);
-    return { result, reason };
-  }, []);
-
-  // Initial state: connected workspaces stay quiet, dismissed ones too.
   useEffect(() => {
     if (!identity) {
       setStep("hidden");
       return;
     }
-    let cancelled = false;
-    void getAgentOsStatus({ data: { identity } })
-      .then((s) => {
-        if (cancelled) return;
-        if (s.connected) {
-          setStep("hidden");
-          return;
-        }
-        let dismissed = false;
-        try {
-          dismissed = window.localStorage.getItem(dismissKey(identity)) === "1";
-        } catch {
-          dismissed = false;
-        }
-        setStep(dismissed ? "hidden" : "explain");
-      })
-      .catch(() => {
-        if (!cancelled) setStep("hidden");
-      });
-    return () => {
-      cancelled = true;
-    };
+    let dismissed = false;
+    try {
+      dismissed = window.localStorage.getItem(dismissKey(identity)) === "1";
+    } catch {
+      dismissed = false;
+    }
+    setStep(dismissed ? "hidden" : "explain");
   }, [identity]);
 
-  // Authorize redirect lands back with ?binance=connected|error.
+  // Workspace menu "Watch holdings" reopens the prompt on demand.
   useEffect(() => {
     if (!identity) return;
-    const outcome = cleanUrl();
-    if (!outcome) return;
-    if (outcome.result === "connected") {
-      setBusy(true);
-      void getAgentOsHoldings({ data: { identity } })
-        .then(({ holdings: found }) => {
-          setHoldings(found);
-          setChecked(new Set(found.map((h) => h.ticker)));
-          setStep(found.length > 0 ? "picker" : "hidden");
-          if (found.length === 0) setNotice("Connected. No holdings detected to import.");
-        })
-        .catch(() => setStep("hidden"))
-        .finally(() => setBusy(false));
-    } else {
-      setNotice(
-        outcome.reason || "Agent OS connect did not finish. Try again from the workspace menu.",
-      );
+    const open = () => {
+      setNotice(null);
       setStep("explain");
-    }
-  }, [identity, cleanUrl]);
-
-  const authorize = useCallback(() => {
-    if (!identity || busy) return;
-    setBusy(true);
-    setNotice(null);
-    void beginAgentOsConnect({ data: { identity } })
-      .then(({ url }) => {
-        window.location.href = url;
-      })
-      .catch((err: unknown) => {
-        setNotice(err instanceof Error ? err.message : "Connect failed. Try again.");
-        setBusy(false);
-      });
-  }, [identity, busy]);
+    };
+    window.addEventListener("agentos:open", open);
+    return () => window.removeEventListener("agentos:open", open);
+  }, [identity]);
 
   const cancel = useCallback(() => {
     if (identity) {
@@ -124,6 +82,18 @@ export function AgentOsPrompt() {
     }
     setStep("hidden");
   }, [identity]);
+
+  const detect = useCallback(() => {
+    const found = detectHoldings(pasted);
+    if (found.length === 0) {
+      setNotice("No tickers detected in that paste. Copy your balances output and try again.");
+      return;
+    }
+    setNotice(null);
+    setHoldings(found);
+    setChecked(new Set(found.map((h) => h.ticker)));
+    setStep("picker");
+  }, [pasted]);
 
   const toggle = useCallback((ticker: string) => {
     setChecked((prev) => {
@@ -138,7 +108,7 @@ export function AgentOsPrompt() {
     if (!identity || busy) return;
     const tickers = [...checked];
     if (tickers.length === 0) {
-      setStep("hidden");
+      cancel();
       return;
     }
     setBusy(true);
@@ -146,14 +116,14 @@ export function AgentOsPrompt() {
       .then(({ added }) => {
         setNotice(
           added.length > 0
-            ? `Watching ${added.join(", ")} from your Agentic sub-account.`
+            ? `Watching ${added.join(", ")}. Research now reads against your positions.`
             : "Those are already on your watchlist.",
         );
         setStep("hidden");
         setBusy(false);
       })
       .catch(() => setBusy(false));
-  }, [identity, busy, checked]);
+  }, [identity, busy, checked, cancel]);
 
   return (
     <>
@@ -168,33 +138,43 @@ export function AgentOsPrompt() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
           role="dialog"
           aria-modal="true"
-          aria-label="Connect Agentic OS"
+          aria-label="Watch your holdings"
         >
           <div className="surface-dark w-full max-w-md p-6">
             {step === "explain" && (
               <>
-                <p className="label-mono text-signal">Connect Agentic OS</p>
+                <p className="label-mono text-signal">Watch your holdings</p>
                 <h2 className="mt-2 font-display text-xl leading-tight">
-                  Let research speak to your holdings
+                  Let research speak to your positions
                 </h2>
                 <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                  Link your Binance Agentic sub-account and StockIntel reads your balances into the
-                  watchlist, then ranks every event against what you actually hold. Read-only market
-                  data and read-only account. No trading, no transfers, disconnect anytime.
+                  In your own agent session with the Binance tools connected, ask for your
+                  sub-account balances. Paste the output below and StockIntel pulls the tickers onto
+                  your watchlist, then ranks every event against what you actually hold. Nothing
+                  leaves your workspace. Paste once, or add tickers by hand on the watchlist page
+                  instead.
                 </p>
+                <textarea
+                  value={pasted}
+                  onChange={(e) => setPasted(e.target.value)}
+                  placeholder="Paste your balances output here"
+                  rows={4}
+                  aria-label="Balances output"
+                  className="mt-4 w-full rounded-sm border border-input bg-card px-3 py-2 font-mono text-xs text-ink placeholder:text-ink-muted"
+                />
                 {notice && (
-                  <p className="mt-3 font-mono text-[11px] text-flag" role="status">
+                  <p className="mt-2 font-mono text-[11px] text-flag" role="status">
                     {notice}
                   </p>
                 )}
-                <div className="mt-5 flex items-center gap-3">
+                <div className="mt-4 flex items-center gap-3">
                   <button
                     type="button"
-                    onClick={authorize}
-                    disabled={busy}
-                    className="app-signal-button"
+                    onClick={detect}
+                    disabled={busy || !pasted.trim()}
+                    className="app-signal-button disabled:opacity-60"
                   >
-                    {busy ? "Redirecting" : "Authorise"}
+                    Detect holdings
                   </button>
                   <button
                     type="button"
@@ -249,7 +229,7 @@ export function AgentOsPrompt() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setStep("hidden")}
+                    onClick={cancel}
                     className="font-mono text-[11px] text-muted-foreground underline underline-offset-2 hover:text-ink"
                   >
                     Skip

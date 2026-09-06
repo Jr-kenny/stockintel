@@ -159,6 +159,7 @@ const marketSchema = z
     at: z.string(),
     lines: z.array(z.string()),
     byCompany: z.record(
+      z.string(),
       z.object({ symbol: z.string(), price: z.number(), change24hPct: z.number() }),
     ),
     source: z.enum(["agent-os", "mirror"]).optional().default("mirror"),
@@ -204,9 +205,7 @@ export const getInquiry = createServerFn({ method: "POST" })
       synthesis: row.synthesisJson
         ? ({
             ...(synthesisSchema.parse(JSON.parse(row.synthesisJson)) as SynthesisView),
-            market: row.marketJson
-              ? marketSchema.parse(JSON.parse(row.marketJson))
-              : null,
+            market: row.marketJson ? marketSchema.parse(JSON.parse(row.marketJson)) : null,
           } as SynthesisView)
         : null,
       error: row.error,
@@ -329,10 +328,10 @@ export const listSupplyRecords = createServerFn({ method: "POST" })
       .from(supplyRecords)
       .where(eq(supplyRecords.identity, data.identity))
       .orderBy(desc(supplyRecords.createdAt));
-  return rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    markets: JSON.parse(r.marketsJson) as string[],
-    targets: JSON.parse(r.targetsJson) as string[],
-  }));
-});
+    return rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      markets: JSON.parse(r.marketsJson) as string[],
+      targets: JSON.parse(r.targetsJson) as string[],
+    }));
+  });

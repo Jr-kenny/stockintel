@@ -16,7 +16,7 @@ import {
   agentOsToolNames,
 } from "../src/lib/binance/agent-os.ts";
 
-const MCP_URL = process.env["AGENT_OS_MCP_URL"]?.trim() || "https://www.binance.com/mcp/agentic";
+const MCP_URL = process.env["AGENT_OS_MCP_URL"]?.trim() || "https://agent.binance.com/mcp/agentic";
 const symbol = (process.argv[2] ?? "BTCUSDT").toUpperCase();
 
 async function main() {

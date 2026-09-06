@@ -17,72 +17,22 @@ export const getMarketQuotes = createServerFn({ method: "POST" })
   });
 
 /**
- * Agent OS connection state for the React UI. Read-only and non-throwing:
- * the probe reports live, firewall, auth, or no-token so the badge can
- * say what to do next. Pass the Privy identity (email or wallet).
+ * Agent OS source state for the UI badge. Read-only and non-throwing.
+ * Binance only recognises its approved agent clients, so there is no
+ * in-app authorize flow. Live context arrives through the shared server
+ * key, otherwise the public mirror carries the read.
  */
-export const getAgentOsStatus = createServerFn({ method: "POST" })
-  .validator((input: unknown) =>
-    z.object({ identity: z.string().min(1).max(160).optional() }).parse(input),
-  )
-  .handler(async ({ data }) => {
-    const { binanceConnectStatus, resolveAgentOsToken } = await import("@/lib/binance/oauth");
-    const { agentOsStatus } = await import("@/lib/binance/agent-os");
-    const state = data.identity ? await binanceConnectStatus(data.identity) : { connected: false };
-    const token = await resolveAgentOsToken(data.identity ?? null);
-    const probe = await agentOsStatus(token);
-    return { ...state, probe, canConnect: !!data.identity };
-  });
-
-/** Start the Agent OS connect flow. Returns the Binance authorize URL. */
-export const beginAgentOsConnect = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ identity: z.string().min(1).max(160) }).parse(input))
-  .handler(async ({ data }) => {
-    const { beginBinanceConnect } = await import("@/lib/binance/oauth");
-    return beginBinanceConnect(data.identity);
-  });
-
-/** Revoke the workspace Agent OS token. */
-export const disconnectAgentOs = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ identity: z.string().min(1).max(160) }).parse(input))
-  .handler(async ({ data }) => {
-    const { disconnectBinance } = await import("@/lib/binance/oauth");
-    await disconnectBinance(data.identity);
-    return { disconnected: true };
-  });
-
-export type HoldingView = { ticker: string; label: string };
+export const getAgentOsStatus = createServerFn({ method: "POST" }).handler(async () => {
+  const { resolveAgentOsToken } = await import("@/lib/binance/oauth");
+  const { agentOsStatus } = await import("@/lib/binance/agent-os");
+  const token = await resolveAgentOsToken(null);
+  return { probe: await agentOsStatus(token) };
+});
 
 /**
- * Holdings parsed out of the linked Agentic sub-account. Tickers come from
- * the same resolver the market check uses, so anything listed here can be
- * quoted and watched. Unconnected workspaces get an empty list, never an
- * error.
- */
-export const getAgentOsHoldings = createServerFn({ method: "POST" })
-  .validator((input: unknown) => z.object({ identity: z.string().min(1).max(160) }).parse(input))
-  .handler(async ({ data }): Promise<{ connected: boolean; holdings: HoldingView[] }> => {
-    const { resolveAgentOsToken } = await import("@/lib/binance/oauth");
-    const token = await resolveAgentOsToken(data.identity);
-    if (!token) return { connected: false, holdings: [] };
-    const { agentOsAccount } = await import("@/lib/binance/agent-os");
-    const { extractTicker } = await import("@/lib/binance/market");
-    const lines = await agentOsAccount(token)
-      .then((r) => r.lines)
-      .catch(() => [] as string[]);
-    const seen = new Set<string>();
-    const holdings: HoldingView[] = [];
-    for (const line of lines) {
-      const ticker = extractTicker(line);
-      if (!ticker || seen.has(ticker)) continue;
-      seen.add(ticker);
-      holdings.push({ ticker, label: line.slice(0, 90) });
-    }
-    return { connected: true, holdings: holdings.slice(0, 20) };
-  });
-
-/**
- * Import selected holdings as watchlist entries tagged Agent OS.
+ * Import pasted holdings as watchlist entries tagged Agent OS.
+ * The workspace copies its balances out of its own Binance tools once,
+ * picks what to watch, and research reads against it from then on.
  * Rejects unknown tickers and skips anything already watched.
  */
 export const importAgentOsHoldings = createServerFn({ method: "POST" })

@@ -262,23 +262,8 @@ export async function buildMarketSnapshot(
   const byCompany = new Map<string, CompanyMarket>();
   const lines: string[] = [];
   lastQuoteSource = "mirror";
-  // Read-only account context only from the caller's own authorization:
-  // their workspace token, or the shared self-host key. One workspace
-  // never sees another workspace's balances in its readout.
-  let accountLines: string[] = [];
-  if (mcpToken) {
-    try {
-      const { workspaceTokenFor } = await import("./oauth");
-      const own = identity ? await workspaceTokenFor(identity) : null;
-      const env = process.env["BINANCE_MCP_TOKEN"]?.trim();
-      if (own || (env && env.length > 10)) {
-        const { agentOsAccount } = await import("./agent-os");
-        accountLines = (await agentOsAccount(mcpToken)).lines;
-      }
-    } catch {
-      // account scope not granted; prices still flow
-    }
-  }
+  // Personal holdings arrive through the watchlist, which the snapshot
+  // already marks. Shared context stays account-free.
   if (tickers.size === 0) return { lines, byCompany, source: lastQuoteSource };
   const quotes = await getQuotes([...tickers], mcpToken);
   for (const q of quotes) {
@@ -297,6 +282,5 @@ export async function buildMarketSnapshot(
       }
     }
   }
-  for (const l of accountLines) lines.push(`Account: ${l}`);
   return { lines, byCompany, source: lastQuoteSource };
 }
