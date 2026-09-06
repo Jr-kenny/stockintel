@@ -1,5 +1,13 @@
 # Memory
 
+## 2026-09-06 — Personal Agent OS (user revision)
+
+- Dropped the operator-only model per user direction. Every workspace links its own Agentic sub-account now.
+- Post-login popup: explains the link, Authorise or Cancel, no nag after dismiss. Connect Binance OS also lives beside Rename and Sign out.
+- Post-authorize holdings picker with all boxes ticked by default, untick to reject. Imports become watchlist entries tagged Agent OS, dupes skipped.
+- Synthesis folds watchlist tickers into the market snapshot, marks held lines, and instructs theses to speak through held positions.
+- Verified: tsc clean, eslint clean, prod build passes, routes smoke-tested, committed fedb8ea and pushed.
+
 ## 2026-09-06 — Agent OS Track A proof complete
 
 - Fixed MCP endpoint to https://www.binance.com/mcp/agentic (agent.binance.com 404s, verified with live probes). Override via AGENT_OS_MCP_URL.
