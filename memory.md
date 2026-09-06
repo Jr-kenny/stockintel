@@ -90,9 +90,10 @@ is this repo. To pick up the collector change:
 
 ### Still open
 
-- `synthesize.ts` still writes the legacy `synthesis_json`. Both objects are written
-  per run so nothing is lost, but the old path is dead weight once the UI has been
-  live on reports for a while.
+- Legacy synthesis path removed 2026-09-06: `run.ts` no longer calls
+  `synthesizeInquiry`, `synthesize.ts` deleted, the reflect script carries its
+  own legacy type. New runs write report plus readout only. Old `synthesis_json`
+  rows still read as fallback in the UI and MCP layer, schema column untouched.
 - Two-wave dispatch is live, observation gap closed by construction: wave one is a
   short open sweep, hypotheses form from wave-one returns plus tape plus memory,
   wave two is the aimed hunt. `observe.ts` stays as the cold-start fallback when

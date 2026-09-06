@@ -17,7 +17,6 @@ import {
   type SubmittedClaim,
 } from "./grade";
 import { llmGradeClaims } from "./llm-grade";
-import { synthesizeInquiry } from "./synthesize";
 import { anchorRecord } from "@/lib/base/evidence-anchor";
 import {
   recallForInquiry,
@@ -1031,10 +1030,9 @@ export async function gradeAndSynthesize(inquiryId: string) {
       })
       .where(eq(inquiries.id, inquiryId));
 
-    // Connection pass — the analyst step. Runs on the FULL graded set before
-    // synthesis, so the report is written from named causal chains rather than
-    // from four truncated claim rows. Failure here is not fatal: synthesis can
-    // still write from the readout, it just has less to work with.
+    // Connection pass - the analyst step. Runs on the FULL graded set so the
+    // report is written from named causal chains rather than from truncated
+    // claim rows. Failure here is not fatal: the readout is already stored.
     try {
       // Market context for the connection pass. Best-effort: the chains are
       // about the events, and a missing snapshot must not cost us the analysis.
@@ -1114,13 +1112,7 @@ export async function gradeAndSynthesize(inquiryId: string) {
       );
       if (written.issues.length > 0) console.log(`[report] issues: ${written.issues.join(" | ")}`);
     } catch (err) {
-      console.error("connection pass failed (synthesis continues):", err);
-    }
-
-    try {
-      await synthesizeInquiry(inquiryId);
-    } catch (err) {
-      console.error("synthesis failed (readout kept):", err);
+      console.error("connection pass failed (readout kept):", err);
     }
 
     void anchorRecord({

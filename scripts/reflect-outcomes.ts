@@ -15,7 +15,11 @@ import { and, desc, eq, isNotNull, lt } from "drizzle-orm";
 import { db, ensureSchema, nowIso } from "../src/lib/db/index.ts";
 import { inquiries, memoryClaims } from "../src/lib/db/schema.ts";
 import { companyToTicker, getQuotes } from "../src/lib/binance/market.ts";
-import type { Synthesis } from "../src/lib/orchestrator/synthesize.ts";
+
+/** Legacy per-company thesis shape, kept for runs recorded before the report pass. */
+type Synthesis = {
+  recommendations?: { company: string; verdict?: unknown }[];
+};
 
 const REFLECT_AFTER_MS = 48 * 3600 * 1000;
 const OUTCOME_BAND_PCT = 3; // moves inside this band read as noise

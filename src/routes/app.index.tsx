@@ -194,9 +194,9 @@ function Intelligence() {
         window.clearInterval(pollRef.current!);
         setPhase("failed");
       }
-      // Thesis is the product: stay on the run until synthesis lands, not
-      // just the raw readout. Synthesis follows grading within a minute or so.
-      if (state.status === "complete" && state.synthesis) {
+      // The report is the product: prefer runs carrying one, and accept the
+      // raw readout otherwise. Legacy synthesis counts as a finished run too.
+      if (state.status === "complete" && (state.report || state.synthesis)) {
         window.clearInterval(pollRef.current!);
         setPhase("done");
         if (identityRef.current) void refreshRunsRef.current?.();
