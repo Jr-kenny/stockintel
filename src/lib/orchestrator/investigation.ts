@@ -169,13 +169,15 @@ export function shouldRecurse(params: {
   if (tokenUsed >= tokenBudget) return { should: false, reason: `token budget ${tokenUsed} >= ${tokenBudget}` };
   if (graded.length === 0) return { should: false, reason: "no claims to follow up on" };
 
-  // Thin evidence: less than 5 independent companies → worth digging deeper
+  // Thin evidence: less than 3 independent companies → worth digging deeper.
+  // depth <= 1 rather than === 1 so an off-by-one in the caller cannot silently
+  // disable follow-up rounds the way it did before.
   const distinctCompanies = new Set(graded.map((g) => g.company.toLowerCase())).size;
-  if (distinctCompanies < 3 && depth === 1) return { should: true, reason: `thin evidence: only ${distinctCompanies} companies, digging deeper` };
+  if (distinctCompanies < 3 && depth <= 1) return { should: true, reason: `thin evidence: only ${distinctCompanies} companies, digging deeper` };
 
   // Low average confidence → need verification
   const avgWeight = graded.reduce((s, g) => s + g.weight, 0) / graded.length;
-  if (avgWeight < 0.15 && depth === 1) return { should: true, reason: `low confidence avg ${avgWeight.toFixed(3)}, verifying` };
+  if (avgWeight < 0.15 && depth <= 1) return { should: true, reason: `low confidence avg ${avgWeight.toFixed(3)}, verifying` };
 
   // Contradictions need resolution
   if (contradictions > 0) return { should: true, reason: `${contradictions} contradiction(s) to verify` };
@@ -184,7 +186,7 @@ export function shouldRecurse(params: {
   if (totalClusters >= 8 && avgWeight > 0.25) return { should: false, reason: "good coverage, diminishing return" };
 
   // Default: one follow-up round if we still have budget and depth
-  if (depth === 1) return { should: true, reason: "first follow-up round — expanding top signals" };
+  if (depth <= 1) return { should: true, reason: "first follow-up round — expanding top signals" };
 
   return { should: false, reason: "depth 2+ and no strong signal to continue" };
 }

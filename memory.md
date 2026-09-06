@@ -1,5 +1,124 @@
 # Memory
 
+## 2026-09-06 — Orchestrator verification plus target report architecture
+
+Code-level audit of the intelligence loop, then the user's correction of what it should be.
+No code changed. This entry is the spec for the rebuild.
+
+### What the code actually does today
+
+Execution order: `submitInquiry` (fns.ts:46) inserts, calls `runInquiry` (run.ts:125).
+`extractScope` regex, then `recallForInquiry`, then `generateHypotheses` (one LLM call), then
+`buildInitialInvestigation`, then one identical `ResearchCommand` to every online agent
+(`agentsOnGrid`, run.ts:82). Returns. A poll (`getInquiry`, fns.ts:182) triggers
+`gradeAndSynthesize` (run.ts:388): deterministic cluster grading, optional `runFollowUpRounds`,
+`llmGradeClaims`, readout, `synthesizeInquiry` (synthesize.ts:490).
+
+So the real shape is question, hypothesis, fan-out news search, cluster, market gauge, thesis.
+
+### Confirmed failures, with evidence
+
+- **Ten agents are one agent.** `md5 agents/*/index.ts` plus `diff` shows the only differences are
+  `CONNECTOR_PORT`, `NAME`, `SPECIALTY`. All hit `fetchGoogleNews` + `fetchGdelt` + `fetchEdgar`.
+  Proof in the DB: `INQ-mtnscydjabre` has 72 claim rows, 9 distinct agents, **8 distinct claims**.
+  Nine agents, one search.
+- **Hypotheses never drive investigation.** `buildQueries` (agents/web-research/index.ts:107) uses
+  only `h.searchHints`. `whatToVerify` is never read by any agent. `investigation` arrives typed
+  `unknown` (line 100) and is never touched. `memory_brief` and `memory_recheck` are dispatched and
+  read by nobody (grep: zero references across all ten agents).
+- **No observation before hypothesis.** `generateHypotheses` (hypothesis.ts:176) is called with only
+  the question string. No prices, no headlines, no prior state. The stored Sept 5 hypotheses are
+  model recollection: "TSMC CoWoS Packaging Bottleneck", `searchHints: ["TSMC CoWoS capacity
+  expansion 2025 delay"]`. The market snapshot doesn't run until synthesis, at the very end.
+- **Recursion has never executed.** Every stored run has `investigation_json.depth === 0`.
+  `buildInitialInvestigation` sets `depth: 0`, `shouldRecurse` only has branches for `depth >= 1`,
+  and `depth` is only bumped inside `runFollowUpRounds`. Dead on the first pass, always.
+- **Connection is regex and templates, never reasoning.** `deriveFollowUpTasks`
+  (investigation.ts:98) is a hardcoded 3xN loop emitting the same three objectives.
+  `evidence-graph.ts:16` only makes `announced_in`, `owns` (regex on hotel|estate|mall|hospital),
+  `likely_needs`. **No entity ever links to another entity**, so no A to B to C path can exist.
+  `exposurePath` (synthesize.ts:231) is a keyword switch with canned semiconductor phrasing.
+  `detectContradictions` (scoring.ts:60) matches month names and "completed" vs "construction",
+  returns 0 on every stored run.
+- **Synthesis is a summarizer.** Fed `withSources.slice(0, 4)`, `top_claim` truncated to 300 chars,
+  two sources each (synthesize.ts:657), asked for a 4-sentence body.
+- **Entities come from headline regex.** `extractCompany` / `cleanName` (agent lines 273-328) is why
+  the stored run shipped `"TSMC Is"`, `"Great AI Silicon"`, `"AI Infrastructure Investment Boom"`,
+  and `"Intel Foundry secures contract"` as companies, each with its own verdict.
+- **Timeframe is price geometry, not evidence.** `marketVerdict` picks from three literals
+  ("unclear, needs confirmation", "days to weeks", "1 to 4 weeks") from `run14` and range position.
+  `MarketFacts` carries no event dates. LLM override validated only by `length > 2`.
+- **Pricing verdict is half-grounded.** The gauge (`positioningGauge`, market-test.ts:65) is real
+  live candle math and honestly emits measurements only. But `confidence >= 70` gating means
+  "priced in" really means "stock ran recently and our evidence is thin". Event dates and price
+  moves both exist and are never joined. The LLM invented "fair value band roughly $215 to $245",
+  passed through because the guard (synthesize.ts:398) only rejects buy/sell/long/short.
+- **Sources are real but links are wrong.** Traceable end to end, no post-hoc fetching anywhere.
+  But `agents/web-research/index.ts:439` stores `publisherUrl`, so URLs are homepages
+  (`https://wccftech.com`). The reader can't verify the claim.
+- **MCP layer is fine.** `stockintel-mcp.ts` reads stored runs honestly, labels staleness past 24h,
+  returns honest empties. `stockintel_investigate` dispatches the same real grid. Not the problem.
+- **`soul.md` doctrine reaches every LLM pass via `guidedSystem` and no code implements it.**
+  Nothing asks for a chain, nothing validates one exists.
+
+Keepers: hypothesis generation, the Binance gauge, executive-first ordering (`preamble` renders
+before sources).
+
+### Target architecture (user's direction, this supersedes the current design)
+
+**Specialists collect, they do not analyse.** An admin gets the assignment and sends its goons to
+bring back findings. Each goon has its own beat and its own sources. They return the event, the
+source, what happened, verbatim. No verdict, no hypothesis, no confidence, no `whyRelevant`.
+That is the orchestrator's job and they are currently stealing it.
+
+**The orchestrator is the analyst.** It hypothesizes, dispatches, receives, joins, connects,
+interprets, concludes. All judgment lives in one place.
+
+**The output is one intelligence report, not a thesis per company.** Sections in order:
+
+1. Executive intelligence. Conclusion first, before any sources. What happened, what matters,
+   current assessment. The reader should not have to read 15 articles to learn why they matter.
+2. Evidence. Per event: source, what happened (no invention), why it matters in the context of the
+   watched name's business and supply chain and competitors, then "our read".
+3. Cross-source synthesis. A + B + C therefore D, or deeper reading of A, B, C opens E, F, G, H.
+   Includes capacity and collaboration reasoning, for example: X and Y want a mega datacenter, Y
+   lacks the capacity alone, so a Z collab is likely or they fall back to W.
+4. Market implication by horizon: immediate, 1 to 4 weeks, 1 to 3 months, 3 to 12 months.
+5. Scenarios: bull, base, bear, catalysts, risks, invalidation signals. Falsifiable. Not "we believe
+   NVDA will benefit" but "our assessment stays positive unless X happens".
+6. Bottom line. What to remember, the single most important signal to monitor next, what would force
+   a rethink.
+
+**Every factual claim traceable, confidence calibrated to evidence strength.** Not "AI demand is
+accelerating" but "we assess it's accelerating because X, Y, Z occurred per these sources, though Z
+is weaker evidence so confidence is moderate rather than high".
+
+**MCP callers reach the orchestrator, never the specialists.** An outside agent calling in gets the
+orchestrator, which directs our own specialists. Clusters return evidence plus how it connects,
+without a full thesis per cluster.
+
+### Conflicts to resolve before building
+
+- `SynthesisRecommendation` (agent-read.ts) requires `verdict`, `marketCall`, `timeframe`,
+  `confidence` per entity. The per-company thesis is baked into the type system. The report schema
+  has to change shape, not just its prompt, or sections get bolted onto the same wrong structure.
+- Specialist contract must narrow to collection-only. Strip `confidence` and `whyRelevant` from
+  agent submissions.
+- One timeframe string where four horizons are needed.
+- No scenario layer exists as structured fields. Hypothesis stage already demands an invalidation
+  path, so the instinct is in the code and never reaches the output.
+- `graph_edges` needs entity to entity relations (`supplies`, `competes_with`, `customer_of`) so a
+  chain can be stored and traversed.
+- Confidence must become an evidence-strength judgment, not a weighted average of source count and
+  freshness.
+- Resolve the Google News redirect so sources link to articles.
+- Fix the `depth` initialization so recursion can fire.
+- Add an observation pass before hypothesis (live price, fresh headlines, prior run state).
+- Add an LLM connection pass over the full evidence set before synthesis, output being the chain
+  itself: event, named intermediate hops, direction, magnitude, each step labeled observed fact,
+  inference, or speculation.
+- Join event dates against price moves for the priced-in call. Both inputs already exist.
+
 ## 2026-09-06 — Thesis first
 
 - Live investigation leads everywhere now: first tool, first skill entry, first demo step. Stored reads are labeled memory and admit age past a day.

@@ -26,6 +26,27 @@ const NAME = "web-research — General web investigation";
 const SPECIALTY =
   "General web investigation — broad search and cross-checking across news, filings and public records";
 
+/**
+ * This agent's beat: which sources it actually reads.
+ *
+ * The grid is only worth ten agents if the ten read ten different places.
+ * When every agent hit the same Google News RSS the run produced nine copies
+ * of one search, so corroboration was impossible by construction: you cannot
+ * cross-check a source against itself. Each agent now owns a distinct beat and
+ * the orchestrator does the joining.
+ *
+ * web-research: The generalist: broad news plus GDELT plus filings, no restriction. Something has to keep the wide net.
+ */
+const BEAT = {
+  googleNews: true,
+  gdelt: true,
+  edgar: true,
+  /** Publisher domains to restrict news to. Empty = no restriction. */
+  domains: [] as string[],
+  /** Extra query suffixes that aim the beat at this agent's subject matter. */
+  angles: [] as string[],
+};
+
 const wallet =
   process.env["CONNECTOR_WALLET"] ??
   new ethers.Wallet(ethers.Wallet.createRandom().privateKey).address;
@@ -104,6 +125,26 @@ type ResearchCommand = {
 
 // ─── Query building ─────────────────────────────────────────────────────────
 
+/**
+ * Aim a query at this agent's beat.
+ *
+ * Two levers: `angles` appends subject-matter terms so a procurement agent asks
+ * about tenders where a person-role agent asks about appointments, and `domains`
+ * restricts news to the publishers that actually cover this beat. Without these
+ * the beat config would be decorative and every agent would resolve to the same
+ * search string again.
+ */
+function aim(query: string, angleIndex: number): string {
+  const parts = [query];
+  if (BEAT.angles.length > 0) {
+    parts.push(BEAT.angles[angleIndex % BEAT.angles.length]!);
+  }
+  if (BEAT.domains.length > 0) {
+    parts.push(BEAT.domains.map((d) => `site:${d}`).join(" OR "));
+  }
+  return parts.join(" ").trim();
+}
+
 function buildQueries(cmd: ResearchCommand): string[] {
   // Hypotheses-aware: use the orchestrator's search hints first — they already encode
   // exposure-chain reasoning (events, counterparties, filings), not just keywords.
@@ -111,7 +152,7 @@ function buildQueries(cmd: ResearchCommand): string[] {
     const hints = cmd.hypotheses.flatMap((h) => h.searchHints ?? []).filter(Boolean).slice(0, 6);
     if (hints.length >= 2) {
       const geo = cmd.scope.geography ? ` ${cmd.scope.geography}` : "";
-      return hints.map((q) => `${q}${geo}`.trim());
+      return hints.map((q, i) => aim(`${q}${geo}`.trim(), i));
     }
   }
   const geo = cmd.scope.geography ?? "";
@@ -130,7 +171,13 @@ function buildQueries(cmd: ResearchCommand): string[] {
   if (topic && geo) queries.push(`${topic} ${geo}`);
   if (topic && !geo) queries.push(topic);
   if (queries.length === 0 && geo) queries.push(geo);
-  return Array.from(new Set(queries)).slice(0, 2);
+  // One query per angle so a multi-angle beat still covers its own ground when
+  // the orchestrator sent no hints.
+  const spread = BEAT.angles.length > 0 ? BEAT.angles.length : 1;
+  const aimed = queries.flatMap((q) =>
+    Array.from({ length: spread }, (_, i) => aim(q, i)),
+  );
+  return Array.from(new Set(aimed)).slice(0, Math.max(2, spread));
 }
 
 // ─── Sources ────────────────────────────────────────────────────────────────
@@ -577,12 +624,14 @@ async function researchAndSubmit(command: ResearchCommand) {
 
     const signals: RawSignal[] = [];
     for (const q of queries) {
-      try {
-        signals.push(...(await fetchGoogleNews(q)));
-      } catch (err) {
-        console.warn("  google news failed:", err instanceof Error ? err.message : err);
+      if (BEAT.googleNews) {
+        try {
+          signals.push(...(await fetchGoogleNews(q)));
+        } catch (err) {
+          console.warn("  google news failed:", err instanceof Error ? err.message : err);
+        }
       }
-      if (GDELT_ENABLED) {
+      if (BEAT.gdelt && GDELT_ENABLED) {
         try {
           signals.push(...(await fetchGdelt(q)));
         } catch (err) {
@@ -596,7 +645,7 @@ async function researchAndSubmit(command: ResearchCommand) {
       .replace(/[^a-z0-9\s]/g, " ")
       .split(/\s+/)
       .filter((w) => w.length > 4 && !STOPWORDS.has(w));
-    if (topicWords.length > 0) {
+    if (BEAT.edgar && topicWords.length > 0) {
       try {
         signals.push(...(await fetchEdgar(topicWords)));
         console.log("  edgar signals fetched");

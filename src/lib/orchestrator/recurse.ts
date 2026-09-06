@@ -66,10 +66,14 @@ export async function runFollowUpRounds(params: {
   let newClaimsAdded = 0;
   let seenClaimIds = new Set<string>();
 
-  // Initialize investigation with first round if not already
+  // Fold round one into the state before deciding anything. This also moves depth
+  // 0 → 1: one round of evidence is in hand. Sync the local counter to the state,
+  // otherwise every shouldRecurse branch that keys on "one round done" is
+  // unreachable and follow-up rounds never fire.
   if (investigation) {
     investigation = updateInvestigationWithGraded(investigation, currentGraded);
     tokenUsed = estimateInvestigationTokens(investigation, currentGraded);
+    depth = investigation.depth ?? depth;
   }
 
   // Track which claims we've already graded (by agentId+claim)
