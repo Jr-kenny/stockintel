@@ -17,20 +17,20 @@ export type GaugeLine = { label: string; detail: string };
 // Same geo-unrestricted mirror as market.ts. Klines are public data.
 const REST_BASE = "https://data-api.binance.vision";
 
-export async function getKlines(symbol: string, limit = 120): Promise<Candle[]> {
+export async function getKlines(
+  symbol: string,
+  limit = 120,
+  mcpToken?: string | null,
+): Promise<Candle[]> {
   // Agent OS first; any failure falls through to the mirror.
-  try {
-    const { agentOsConfig, agentOsKlines } = await import("./agent-os");
-    if (agentOsConfig().live) {
-      try {
-        const rows = await agentOsKlines(symbol, limit);
-        if (rows.length >= 15) return rows;
-      } catch {
-        // fall through to mirror
-      }
+  if (mcpToken) {
+    try {
+      const { agentOsKlines } = await import("./agent-os");
+      const rows = await agentOsKlines(symbol, limit, mcpToken);
+      if (rows.length >= 15) return rows;
+    } catch {
+      // fall through to mirror
     }
-  } catch {
-    // fall through to mirror
   }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10_000);
@@ -106,8 +106,11 @@ export function positioningGauge(symbol: string, candles: Candle[]): GaugeLine[]
 }
 
 /** Full market test for one ticker: quote + positioning gauge lines. */
-export async function marketTest(ticker: string): Promise<{ lines: string[] }> {
-  const [quote] = await getQuotes([ticker]);
+export async function marketTest(
+  ticker: string,
+  mcpToken?: string | null,
+): Promise<{ lines: string[] }> {
+  const [quote] = await getQuotes([ticker], mcpToken);
   const lines: string[] = [];
   if (!quote?.symbol || quote.price === null) {
     lines.push(`${ticker}: no Binance listing`);
@@ -117,7 +120,7 @@ export async function marketTest(ticker: string): Promise<{ lines: string[] }> {
   lines.push(
     `${ticker} (${quote.symbol}): $${quote.price.toFixed(2)} (${pct24 >= 0 ? "+" : ""}${pct24.toFixed(2)}% 24h)`,
   );
-  const candles = await getKlines(quote.symbol);
+  const candles = await getKlines(quote.symbol, 120, mcpToken);
   for (const g of positioningGauge(quote.symbol, candles)) {
     lines.push(`${g.label}: ${g.detail}`);
   }

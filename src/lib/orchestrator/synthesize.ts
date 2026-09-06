@@ -528,6 +528,7 @@ export async function synthesizeInquiry(inquiryId: string): Promise<void> {  awa
     const snapshot = await buildMarketSnapshot(
       withSources.map((e) => e.company),
       inquiry.question,
+      inquiry.identity,
     );
     for (const [k, v] of snapshot.byCompany) marketByCompany.set(k, v);
     marketPersist = {
@@ -546,7 +547,9 @@ export async function synthesizeInquiry(inquiryId: string): Promise<void> {  awa
       const mapped = companyToTicker(name);
       if (mapped && !tickers.includes(mapped)) tickers.push(mapped);
     }
-    const quotes = await getQuotes(tickers.slice(0, 6));
+    const { agentOsTokenFor } = await import("@/lib/binance/agent-os");
+    const mcpToken = await agentOsTokenFor(inquiry.identity);
+    const quotes = await getQuotes(tickers.slice(0, 6), mcpToken);
     for (const q of quotes) {
       if (!q.symbol || q.price === null) {
         marketByTicker.set(q.ticker, {
@@ -574,7 +577,7 @@ export async function synthesizeInquiry(inquiryId: string): Promise<void> {  awa
         lines: [`${q.ticker} (${q.symbol}): $${q.price.toFixed(2)} (${(q.change24hPct ?? 0) >= 0 ? "+" : ""}${(q.change24hPct ?? 0).toFixed(2)}% 24h)`],
       };
       try {
-        const candles = await getKlines(q.symbol, 120);
+        const candles = await getKlines(q.symbol, 120, mcpToken);
         const gauge = positioningGauge(q.symbol, candles);
         for (const g of gauge) facts.lines.push(`${g.label}: ${g.detail}`);
         const rangeLine = gauge.find((g) => g.label === "Range position")?.detail ?? "";

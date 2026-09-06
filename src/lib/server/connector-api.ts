@@ -81,7 +81,92 @@ export async function handleConnectorApi(request: Request): Promise<Response> {
   if (request.method === "GET" && url.pathname === "/api/health") {
     return json({ ok: true, service: "prime-layer-orchestrator" });
   }
+  if (url.pathname === "/api/binance/client-metadata") {
+    const { clientMetadataDoc } = await import("@/lib/binance/oauth");
+    return json(clientMetadataDoc());
+  }
+  if (request.method === "GET" && url.pathname === "/api/binance/status") {
+    return binanceStatus(url);
+  }
+  if (request.method === "POST" && url.pathname === "/api/binance/connect") {
+    return binanceConnect(request);
+  }
+  if (request.method === "GET" && url.pathname === "/api/binance/callback") {
+    return binanceCallback(url);
+  }
+  if (request.method === "POST" && url.pathname === "/api/binance/disconnect") {
+    return binanceDisconnect(request);
+  }
   return json({ error: "Not found" }, 404);
+}
+
+/** Read-only Agent OS connection state plus a non-throwing live probe. */
+async function binanceStatus(url: URL): Promise<Response> {
+  const identity = url.searchParams.get("identity")?.slice(0, 160) || null;
+  const { binanceConnectStatus, resolveAgentOsToken, appOrigin } =
+    await import("@/lib/binance/oauth");
+  const { agentOsStatus } = await import("@/lib/binance/agent-os");
+  const state = identity ? await binanceConnectStatus(identity) : { connected: false };
+  const token = await resolveAgentOsToken(identity);
+  const probe = await agentOsStatus(token);
+  return json({ origin: appOrigin(), identity, ...state, probe });
+}
+
+async function binanceConnect(request: Request): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Invalid JSON" }, 400);
+  }
+  const parsed = z.object({ identity: z.string().min(1).max(160) }).safeParse(body);
+  if (!parsed.success) {
+    return json({ error: "Validation failed", issues: parsed.error.issues }, 400);
+  }
+  const { beginBinanceConnect } = await import("@/lib/binance/oauth");
+  try {
+    const { url } = await beginBinanceConnect(parsed.data.identity);
+    return json({ url });
+  } catch (err) {
+    return json({ error: err instanceof Error ? err.message : "Connect failed" }, 500);
+  }
+}
+
+/** OAuth redirect target. Finishes the flow, then returns to the app. */
+async function binanceCallback(url: URL): Promise<Response> {
+  const code = url.searchParams.get("code");
+  const state = url.searchParams.get("state");
+  const { completeBinanceConnect, appOrigin } = await import("@/lib/binance/oauth");
+  const home = appOrigin();
+  if (!code || !state) {
+    return Response.redirect(
+      `${home}/app?binance=error&reason=${encodeURIComponent("Missing code or state.")}`,
+      302,
+    );
+  }
+  try {
+    await completeBinanceConnect(code, state);
+    return Response.redirect(`${home}/app?binance=connected`, 302);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : "Connect failed";
+    return Response.redirect(`${home}/app?binance=error&reason=${encodeURIComponent(reason)}`, 302);
+  }
+}
+
+async function binanceDisconnect(request: Request): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Invalid JSON" }, 400);
+  }
+  const parsed = z.object({ identity: z.string().min(1).max(160) }).safeParse(body);
+  if (!parsed.success) {
+    return json({ error: "Validation failed", issues: parsed.error.issues }, 400);
+  }
+  const { disconnectBinance } = await import("@/lib/binance/oauth");
+  await disconnectBinance(parsed.data.identity);
+  return json({ disconnected: true });
 }
 
 async function registerAgent(request: Request): Promise<Response> {

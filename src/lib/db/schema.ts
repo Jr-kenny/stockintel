@@ -267,3 +267,23 @@ export const memoryFollowups = sqliteTable("memory_followups", {
   resolvedAt: text("resolved_at"),
   createdAt: text("created_at").notNull(),
 });
+
+// ── Binance Agent OS OAuth ────────────────────────────────────────────────
+// Per-workspace user tokens from the Agent OS authorization-code flow.
+// Read-only scopes only; the app never requests trade or transfer scopes.
+
+export const binanceOauthStates = sqliteTable("binance_oauth_states", {
+  state: text("state").primaryKey(),
+  identity: text("identity").notNull(),
+  verifier: text("verifier").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export const binanceTokens = sqliteTable("binance_tokens", {
+  identity: text("identity").primaryKey(),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token"),
+  expiresAt: text("expires_at"),
+  scope: text("scope"),
+  updatedAt: text("updated_at").notNull(),
+});

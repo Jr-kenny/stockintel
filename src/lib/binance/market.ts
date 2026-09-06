@@ -132,21 +132,17 @@ export const KNOWN_COMPANIES: Record<string, string> = {
   "TAIWAN SEMICONDUCTOR": "TSM",
 };
 
-async function fetch24hr(symbol: string): Promise<Resolved | null> {
+async function fetch24hr(symbol: string, mcpToken?: string | null): Promise<Resolved | null> {
   // Agent OS first (Track A path). Any failure falls through to the mirror.
-  try {
-    const { agentOsConfig, agentOsTicker } = await import("./agent-os");
-    if (agentOsConfig().live) {
-      try {
-        const t = await agentOsTicker(symbol);
-        lastQuoteSource = "agent-os";
-        return { symbol, price: t.price, change24hPct: t.change24hPct, volume24hQuote: 0 };
-      } catch {
-        // fall through to mirror
-      }
+  if (mcpToken) {
+    try {
+      const { agentOsTicker } = await import("./agent-os");
+      const t = await agentOsTicker(symbol, mcpToken);
+      lastQuoteSource = "agent-os";
+      return { symbol, price: t.price, change24hPct: t.change24hPct, volume24hQuote: 0 };
+    } catch {
+      // fall through to mirror
     }
-  } catch {
-    // fall through to mirror
   }
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8_000);
@@ -179,26 +175,35 @@ async function fetch24hr(symbol: string): Promise<Resolved | null> {
  * Resolve a ticker to a Binance symbol. bStocks (tokenized equities like
  * NVDAB) are tried first, then plain USDT pairs (BTC, ETH, …).
  */
-export async function resolveQuote(ticker: string): Promise<Resolved | null> {
+export async function resolveQuote(
+  ticker: string,
+  mcpToken?: string | null,
+): Promise<Resolved | null> {
   const key = ticker.toUpperCase();
   if (!key) return null;
-  const hit = cache.get(key);
-  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.value;
+  // A workspace token changes the source, so never serve a cached mirror
+  // quote as an Agent OS one or vice versa.
+  const cacheKey = mcpToken ? `${key}|aos` : key;
+  const hit = cache.get(cacheKey);
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) {
+    if (hit.value) lastQuoteSource = cacheKey.endsWith("|aos") ? "agent-os" : "mirror";
+    return hit.value;
+  }
   const candidates = key.endsWith("B") ? [`${key}USDT`, `${key.slice(0, -1)}BUSDT`] : [`${key}BUSDT`, `${key}USDT`];
   let value: Resolved | null = null;
   for (const symbol of candidates) {
-    value = await fetch24hr(symbol);
+    value = await fetch24hr(symbol, mcpToken);
     if (value) break;
   }
-  cache.set(key, { at: Date.now(), value });
+  cache.set(cacheKey, { at: Date.now(), value });
   return value;
 }
 
-export async function getQuotes(tickers: string[]): Promise<Quote[]> {
+export async function getQuotes(tickers: string[], mcpToken?: string | null): Promise<Quote[]> {
   const unique = Array.from(new Set(tickers.map((t) => t.toUpperCase()).filter(Boolean))).slice(0, 20);
   return Promise.all(
     unique.map(async (ticker) => {
-      const r = await resolveQuote(ticker);
+      const r = await resolveQuote(ticker, mcpToken);
       return r
         ? { ticker, symbol: r.symbol, price: r.price, change24hPct: r.change24hPct, volume24hQuote: r.volume24hQuote }
         : { ticker, symbol: null, price: null, change24hPct: null, volume24hQuote: null };
@@ -215,12 +220,15 @@ export type CompanyMarket = { symbol: string; price: number; change24hPct: numbe
 export async function buildMarketSnapshot(
   companies: string[],
   question: string,
+  identity?: string | null,
 ): Promise<{ lines: string[]; byCompany: Map<string, CompanyMarket>; source: "agent-os" | "mirror" }> {
+  const { agentOsTokenFor } = await import("./agent-os");
+  const mcpToken = await agentOsTokenFor(identity ?? null);
   const tickers = new Set<string>();
   for (const name of companies) {
     // Try every candidate spelling; the first live Binance listing wins.
     for (const t of companyTickers(name).slice(0, 4)) {
-      const r = await resolveQuote(t);
+      const r = await resolveQuote(t, mcpToken);
       if (r) {
         tickers.add(t);
         break;
@@ -235,20 +243,16 @@ export async function buildMarketSnapshot(
   // Read-only account context via Agent OS when authorized (positions inside
   // the permissioned Agentic sub-account). Never blocks the snapshot.
   let accountLines: string[] = [];
-  try {
-    const { agentOsConfig, agentOsAccount } = await import("./agent-os");
-    if (agentOsConfig().live) {
-      try {
-        accountLines = (await agentOsAccount()).lines;
-      } catch {
-        // account scope not granted; prices still flow
-      }
+  if (mcpToken) {
+    try {
+      const { agentOsAccount } = await import("./agent-os");
+      accountLines = (await agentOsAccount(mcpToken)).lines;
+    } catch {
+      // account scope not granted; prices still flow
     }
-  } catch {
-    // account scope not granted; prices still flow
   }
   if (tickers.size === 0) return { lines, byCompany, source: lastQuoteSource };
-  const quotes = await getQuotes([...tickers]);
+  const quotes = await getQuotes([...tickers], mcpToken);
   for (const q of quotes) {
     if (!q.symbol || q.price === null) {
       lines.push(`${q.ticker}: no Binance listing`);

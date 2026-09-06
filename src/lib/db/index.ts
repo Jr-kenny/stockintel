@@ -246,6 +246,20 @@ const DDL = [
     resolved_at TEXT,
     created_at TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS binance_oauth_states (
+    state TEXT PRIMARY KEY,
+    identity TEXT NOT NULL,
+    verifier TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS binance_tokens (
+    identity TEXT PRIMARY KEY,
+    access_token TEXT NOT NULL,
+    refresh_token TEXT,
+    expires_at TEXT,
+    scope TEXT,
+    updated_at TEXT NOT NULL
+  )`,
 ];
 
 let migrated = false;

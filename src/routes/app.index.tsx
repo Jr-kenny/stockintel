@@ -4,6 +4,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/h
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SectionHeading, StatusPill } from "@/components/app/AppUI";
 import { RequireAuth } from "@/components/app/auth-gate";
+import { AgentOsConnect } from "@/components/app/agent-os-connect";
 import { PrivyIdentity, type PrivyIdentityInfo } from "@/components/app/privy-identity";
 import {
   getInquiry,
@@ -719,6 +720,9 @@ function Intelligence() {
                   {synthesis.market && synthesis.market.lines.length > 0 && (
                     <div className="surface-dark p-5 sm:p-6" aria-label="Agent OS market check">
                       <p className="label-mono text-signal">Agent OS market check · {synthesis.market.source === "agent-os" ? "live via Agent OS" : "live via public mirror"}</p>
+                      <div className="mt-2">
+                        <AgentOsConnect identity={identity} />
+                      </div>
                       <ul className="mt-3 space-y-1.5 font-mono text-xs leading-relaxed text-ink-muted">
                         {synthesis.market.lines.slice(0, 8).map((line) => (
                           <li key={line}>{line}</li>
