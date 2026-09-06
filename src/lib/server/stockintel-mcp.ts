@@ -361,14 +361,23 @@ export function buildStockintelMcpServer(): McpServer {
       }
       const text =
         s.status === "complete" && s.result
-          ? [
-              s.result.preamble,
-              ...s.result.recommendations.map(
-                (r) => `${r.company} (${r.verdict}, ${r.confidence}%): ${r.marketCall} [${r.timeframe}]`,
-              ),
-            ]
-              .filter(Boolean)
-              .join("\n")
+          ? s.result.report
+            ? [
+                s.result.report.executive.whatHappened,
+                s.result.report.executive.assessment,
+                `Priced in: ${s.result.report.implication.pricedIn} (${s.result.report.implication.pricedInReason})`,
+                `Watch next: ${s.result.report.bottomLine.monitor}`,
+              ]
+                .filter(Boolean)
+                .join("\n")
+            : [
+                s.result.preamble,
+                ...s.result.recommendations.map(
+                  (r) => `${r.company} (${r.verdict}, ${r.confidence}%): ${r.marketCall} [${r.timeframe}]`,
+                ),
+              ]
+                .filter(Boolean)
+                .join("\n")
           : s.status === "failed"
             ? `Investigation failed: ${s.error ?? "unknown error"}.`
             : `${s.status}: ${s.progress.claimsReceived} claims from ${s.progress.agentsMatched} agents. Poll again shortly.`;

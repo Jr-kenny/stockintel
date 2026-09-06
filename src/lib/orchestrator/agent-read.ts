@@ -55,7 +55,8 @@ type MatchedRun = {
   question: string;
   assessedAt: string;
   contradictions: number;
-  synthesis: Synthesis;
+  /** Null on runs recorded after the legacy synthesis write was removed. */
+  synthesis: Synthesis | null;
   readout: Readout;
   /**
    * The intelligence report. Present on runs from the report pass onward, null
@@ -103,17 +104,18 @@ async function listRuns(ticker: string): Promise<MatchedRun[]> {
     .orderBy(desc(inquiries.createdAt));
   const candidates: {
     row: (typeof rows)[number];
-    synthesis: Synthesis;
+    synthesis: Synthesis | null;
     readout: Readout;
     report: IntelligenceReport | null;
   }[] = [];
   for (const row of rows) {
-    if (!row.synthesisJson) continue;
-    let synthesis: Synthesis;
-    try {
-      synthesis = synthesisSchema.parse(JSON.parse(row.synthesisJson));
-    } catch {
-      continue;
+    let synthesis: Synthesis | null = null;
+    if (row.synthesisJson) {
+      try {
+        synthesis = synthesisSchema.parse(JSON.parse(row.synthesisJson));
+      } catch {
+        synthesis = null;
+      }
     }
     let readout: Readout = [];
     try {
@@ -129,6 +131,7 @@ async function listRuns(ticker: string): Promise<MatchedRun[]> {
     } catch {
       report = null;
     }
+    if (!synthesis && !report && readout.length === 0) continue;
     candidates.push({ row, synthesis, readout, report });
   }
   const toRun = (c: (typeof candidates)[number]): MatchedRun => ({
@@ -149,7 +152,8 @@ async function listRuns(ticker: string): Promise<MatchedRun[]> {
     }
     // Otherwise any assessment thread on the ticker counts.
     const hit =
-      c.synthesis.recommendations.some((r) => companyTickers(r.company).includes(want)) ||
+      (c.synthesis?.recommendations.some((r) => companyTickers(r.company).includes(want)) ?? false) ||
+      (c.report?.evidence.some((e) => companyTickers(e.entity).includes(want)) ?? false) ||
       c.readout.some((e) => companyTickers(e.company).includes(want));
     if (hit) threads.push(toRun(c));
   }
@@ -205,8 +209,8 @@ export async function agentAssess(ticker: string): Promise<AssessResult> {
     stale,
     note,
     report: run.report,
-    preamble: run.synthesis.preamble,
-    recommendations: run.synthesis.recommendations,
+    preamble: run.synthesis?.preamble ?? "",
+    recommendations: run.synthesis?.recommendations ?? [],
   };
 }
 
@@ -275,11 +279,27 @@ export type InvestigationStatus = {
     preamble: string;
     recommendations: Synthesis["recommendations"];
     marketLines: string[];
+    report: IntelligenceReport | null;
   } | null;
   error: string | null;
 };
 
 function resultFromRow(row: typeof inquiries.$inferSelect): InvestigationStatus["result"] {
+  let report: IntelligenceReport | null = null;
+  try {
+    report = row.reportJson ? reportSchema.parse(JSON.parse(row.reportJson)) : null;
+  } catch {
+    report = null;
+  }
+  if (report) {
+    return {
+      question: row.question,
+      preamble: report.executive.assessment,
+      recommendations: [],
+      marketLines: report.implication.marketLines,
+      report,
+    };
+  }
   if (!row.synthesisJson) return null;
   try {
     const synthesis = synthesisSchema.parse(JSON.parse(row.synthesisJson));
@@ -295,6 +315,7 @@ function resultFromRow(row: typeof inquiries.$inferSelect): InvestigationStatus[
       preamble: synthesis.preamble,
       recommendations: synthesis.recommendations,
       marketLines,
+      report: null,
     };
   } catch {
     return null;
@@ -389,7 +410,7 @@ export async function agentHistory(ticker: string): Promise<HistoryResult> {
     runs: runs.map((r) => ({
       inquiryId: r.inquiryId,
       assessedAt: r.assessedAt,
-      verdicts: r.synthesis.recommendations.map((rec) => ({
+      verdicts: (r.synthesis?.recommendations ?? []).map((rec) => ({
         company: rec.company,
         verdict: rec.verdict,
         confidence: rec.confidence,
@@ -505,6 +526,37 @@ export async function agentThesisChanges(ticker: string): Promise<ChangesResult>
       note: didChange
         ? `Priced-in went ${prev.implication.pricedIn} to ${cur.implication.pricedIn}, confidence ${prev.confidence.band} to ${cur.confidence.band}. What changed: ${cur.synthesis.whatChanged}`
         : `No material change since ${previous.assessedAt}.`,
+    };
+  }
+
+  // Runs on opposite sides of the report migration have no like-for-like
+  // verdicts. Compare the entity sets honestly instead of forcing it.
+  if (!previous.synthesis || !current.synthesis) {
+    const namesOf = (run: MatchedRun): Map<string, string> => {
+      const m = new Map<string, string>();
+      for (const e of run.report?.evidence ?? []) m.set(normCompany(e.entity), e.entity);
+      for (const r of run.synthesis?.recommendations ?? []) {
+        if (!m.has(normCompany(r.company))) m.set(normCompany(r.company), r.company);
+      }
+      return m;
+    };
+    const prevNames = namesOf(previous);
+    const currNames = namesOf(current);
+    const entered = [...currNames].filter(([k]) => !prevNames.has(k)).map(([, v]) => v);
+    const left = [...prevNames].filter(([k]) => !currNames.has(k)).map(([, v]) => v);
+    const didChange = entered.length > 0 || left.length > 0;
+    return {
+      found: true,
+      ticker: normTicker(ticker),
+      changed: didChange,
+      direction: "unknown",
+      currentAt: current.assessedAt,
+      previousAt: previous.assessedAt,
+      flips: [],
+      confidenceMoves: [],
+      added: entered,
+      removed: left,
+      note: "Runs span the report migration, so verdicts cannot be compared like for like. Entities entering or leaving the picture are listed.",
     };
   }
 
@@ -626,7 +678,7 @@ export async function agentConflicting(ticker: string): Promise<ConflictingResul
           marketCall: inv,
         })),
       ]
-    : run.synthesis.recommendations
+    : (run.synthesis?.recommendations ?? [])
         .filter((r) => r.verdict !== "underpriced")
         .map((r) => ({
           company: r.company,
@@ -702,11 +754,11 @@ export async function agentEvidence(ticker: string, company: string): Promise<Ev
   // real entities. The legacy path matched against per-company thesis threads,
   // where a headline fragment could stand in for a company.
   const reportEvent = run.report?.evidence.find((e) => normCompany(e.entity) === want) ?? null;
-  const rec = run.synthesis.recommendations.find((r) => normCompany(r.company) === want);
+  const rec = run.synthesis?.recommendations.find((r) => normCompany(r.company) === want) ?? null;
   if (!reportEvent && !rec) {
     const known = run.report
       ? Array.from(new Set(run.report.evidence.map((e) => e.entity))).join(", ")
-      : run.synthesis.recommendations.map((r) => r.company).join(", ");
+      : (run.synthesis?.recommendations ?? []).map((r) => r.company).join(", ");
     return {
       ...empty,
       note: `Nothing on ${company} in the latest assessment.${known ? ` Covered: ${known}.` : ""}`,
