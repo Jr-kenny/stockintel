@@ -35,7 +35,9 @@ import {
 import { generateHypotheses } from "./hypothesis";
 import { buildInitialInvestigation } from "./investigation";
 import { connectEvidence } from "./connect";
-import { buildMarketSnapshot } from "@/lib/binance/market";
+import { writeReport } from "./write-report";
+import { buildMarketSnapshot, extractTicker } from "@/lib/binance/market";
+import { judgePricedIn, type PricedInJudgment } from "@/lib/binance/event-reaction";
 import { buildEvidenceGraph } from "./evidence-graph";
 import { computeBreakdown, detectContradictions } from "./scoring";
 import { runFollowUpRounds } from "./recurse";
@@ -927,6 +929,46 @@ export async function gradeAndSynthesize(inquiryId: string) {
       console.log(
         `[connect] ${connection.mode}: ${connection.evidence.length} events, ${connection.chains.length} chain(s)`,
       );
+
+      // Report pass — one document, one assessment, written from the chains.
+      // Priced-in is measured here (event dates against candles) rather than
+      // asserted from a confidence threshold.
+      const watched = extractTicker(inquiry.question.replace(/^watch\s+/i, ""));
+      let pricedIn: PricedInJudgment = {
+        verdict: "unclear",
+        reason: "No ticker resolved for the watched name, so the tape could not be tested.",
+        reactions: [],
+      };
+      if (watched) {
+        try {
+          const { getKlines } = await import("@/lib/binance/market-test");
+          const candles = await getKlines(`${watched}BUSDT`, 120);
+          const observedDates = cappedGraded.flatMap((g) => g.evidence.map((e) => e.observed));
+          pricedIn = judgePricedIn({ observedDates, candles });
+        } catch {
+          // no candles: pricedIn stays unclear, which is the honest answer
+        }
+      }
+      const written = await writeReport({
+        question: inquiry.question,
+        ticker: watched,
+        period: `through ${nowIso().slice(0, 10)}`,
+        connection,
+        marketLines: marketBlock ? marketBlock.split("\n").filter(Boolean) : [],
+        pricedIn,
+      });
+      await db
+        .update(inquiries)
+        .set({
+          reportJson: JSON.stringify(written.report),
+          reportMode: written.mode,
+          updatedAt: nowIso(),
+        })
+        .where(eq(inquiries.id, inquiryId));
+      console.log(
+        `[report] ${written.mode}: pricedIn=${pricedIn.verdict}, ${written.issues.length} issue(s)`,
+      );
+      if (written.issues.length > 0) console.log(`[report] issues: ${written.issues.join(" | ")}`);
     } catch (err) {
       console.error("connection pass failed (synthesis continues):", err);
     }

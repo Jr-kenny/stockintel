@@ -56,21 +56,118 @@ const WIRE_HOSTS = [
   "economist.com",
 ];
 
+/**
+ * Trade press is recognised STRUCTURALLY, not by a list of names.
+ *
+ * A hardcoded roster would quietly privilege whatever sector it was written
+ * for. Users watch shipping lines, banks, miners, pharma, utilities and cement
+ * producers, and a list of semiconductor blogs is worth nothing to any of them.
+ *
+ * What actually generalises: specialist outlets carry a sector word in the
+ * domain itself. lloydslist, pharmatimes, miningweekly, bankingdive,
+ * offshore-energy, datacenterdynamics. So match the shape, not the name.
+ */
+const TRADE_MARKERS = [
+  // Publication-type words that only appear in trade domains.
+  "journal",
+  "gazette",
+  "weekly",
+  "monthly",
+  "daily",
+  "review",
+  "digest",
+  "insider",
+  "dive", // constructiondive, bankingdive, utilitydive, retaildive
+  "wire",
+  "brief",
+  "report",
+  "intelligence",
+  "analysis",
+  "newsletter",
+  "magazine",
+  "times",
+  "post",
+  "observer",
+  "monitor",
+  "tracker",
+  // Sector words, deliberately broad and cross-industry.
+  "trade",
+  "industry",
+  "market",
+  "supply",
+  "logistics",
+  "shipping",
+  "maritime",
+  "freight",
+  "aviation",
+  "rail",
+  "energy",
+  "oil",
+  "gas",
+  "power",
+  "utility",
+  "mining",
+  "metal",
+  "steel",
+  "chemical",
+  "pharma",
+  "medtech",
+  "biotech",
+  "health",
+  "agri",
+  "food",
+  "retail",
+  "property",
+  "estate",
+  "construction",
+  "infra",
+  "engineering",
+  "manufactur",
+  "automotive",
+  "auto",
+  "semiconductor",
+  "datacenter",
+  "telecom",
+  "fintech",
+  "banking",
+  "insurance",
+  "defense",
+  "defence",
+  "aerospace",
+  "maritime",
+  "textile",
+  "cement",
+  "timber",
+  "paper",
+  "packaging",
+  "tech",
+];
+
+/**
+ * Named specialists whose domains carry no sector marker. Short by design: the
+ * structural test above is the general mechanism and this is only for outlets
+ * that would otherwise be misread as personal blogs.
+ */
 const TRADE_HOSTS = [
-  "datacenterdynamics.com",
-  "constructiondive.com",
-  "utilitydive.com",
-  "enr.com",
   "semianalysis.com",
-  "theinformation.com",
   "stratechery.com",
+  "theinformation.com",
   "tomshardware.com",
   "anandtech.com",
-  "techcrunch.com",
   "theverge.com",
   "arstechnica.com",
-  "defensenews.com",
-  "govconwire.com",
+  "techcrunch.com",
+  "enr.com",
+  "axios.com",
+  "politico.com",
+  "lloydslist.com",
+  "tradewindsnews.com",
+  "argusmedia.com",
+  "platts.com",
+  "fastmarkets.com",
+  "endpts.com",
+  "statnews.com",
+  "fiercepharma.com",
 ];
 
 /**
@@ -107,13 +204,43 @@ function host(source: string): string {
   return sourceClusterKey(source).split("/")[0] ?? "";
 }
 
+/**
+ * Regulator and government domains, by suffix rather than by name. A tender
+ * board in Nigeria or a filing office in Chile is as primary as the SEC, and no
+ * list of specific hosts would ever cover them.
+ */
+const PRIMARY_SUFFIXES = [".gov", ".govt.nz", ".gc.ca", ".europa.eu", ".int"];
+/**
+ * Anchored on a label boundary rather than a literal dot, so a bare apex domain
+ * like gov.uk classifies the same as www.gov.uk. `(^|\.)` is the whole trick.
+ */
+const PRIMARY_PATTERNS = [
+  /(^|\.)gov\.[a-z]{2,3}$/,
+  /(^|\.)go\.[a-z]{2}$/,
+  /(^|\.)gob\.[a-z]{2}$/,
+  /(^|\.)gouv\.[a-z]{2}$/,
+];
+
 export function classifySource(source: string): SourceTier {
   const h = host(source);
   if (!h) return "general";
+
+  // Primary: the company or a regulator speaking for itself.
   if (PRIMARY_HOSTS.some((p) => h.includes(p))) return "primary";
+  if (PRIMARY_SUFFIXES.some((s) => h.endsWith(s))) return "primary";
+  if (PRIMARY_PATTERNS.some((re) => re.test(h))) return "primary";
+
+  // Aggregators before everything else: a recycler carrying a sector word in
+  // its domain must not be promoted to trade.
   if (AGGREGATOR_HOSTS.some((p) => h.includes(p))) return "aggregator";
+
   if (WIRE_HOSTS.some((p) => h.includes(p))) return "wire";
   if (TRADE_HOSTS.some((p) => h.includes(p))) return "trade";
+
+  // Structural trade test: specialist outlets name their beat in the domain.
+  const stem = h.replace(/\.[a-z.]+$/, "");
+  if (TRADE_MARKERS.some((m) => stem.includes(m))) return "trade";
+
   return "general";
 }
 

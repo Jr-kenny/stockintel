@@ -52,6 +52,13 @@ export const inquiries = sqliteTable("inquiries", {
   connectionJson: text("connection_json"),
   /** "llm" when a model connected the evidence, "deterministic" when it fell back. */
   connectMode: text("connect_mode"),
+  /**
+   * The intelligence report: executive, evidence, synthesis, four horizons,
+   * scenarios, bottom line. Replaces the per-company thesis in synthesis_json,
+   * which is kept for older runs and the surfaces still reading it.
+   */
+  reportJson: text("report_json"),
+  reportMode: text("report_mode"),
   /** Persisted Binance snapshot taken at synthesis time (for outcome reflection). */
   marketJson: text("market_json"),
   error: text("error"),
