@@ -26,7 +26,7 @@ function appBase(): string {
   const raw =
     process.env["PUBLIC_APP_URL"]?.trim() ||
     process.env["PUBLIC_SUBMIT_URL"]?.trim() ||
-    "https://stockintel-eight.vercel.app";
+    "https://stockintelislive.vercel.app";
   return raw.replace(/\/+$/, "");
 }
 
@@ -193,6 +193,104 @@ export function buildStockintelMcpServer(): McpServer {
       return {
         content: [{ type: "text" as const, text }],
         structuredContent: c,
+      };
+    },
+  );
+
+  server.registerTool(
+    "stockintel_thesis_changes",
+    {
+      title: "Thesis changes",
+      description:
+        "What changed between the last two assessments for a ticker: verdict flips, confidence " +
+        "moves, added and removed threads, a strengthening or weakening direction, plus the full " +
+        "assessment history. Served from stored runs. Read-only, no key needed.",
+      inputSchema: {
+        ticker: z.string().max(12).describe("Ticker to compare, e.g. NVDA."),
+      },
+    },
+    async ({ ticker }) => {
+      const { agentThesisChanges, agentHistory } = await import("@/lib/orchestrator/agent-read");
+      const [changes, history] = await Promise.all([agentThesisChanges(ticker), agentHistory(ticker)]);
+      const payload = { ...changes, history: history.runs };
+      const text = !changes.found
+        ? changes.note
+        : !changes.changed
+          ? `No material change since ${changes.previousAt}. Direction: ${changes.direction}.`
+          : [
+              `Direction: ${changes.direction} (${changes.previousAt} -> ${changes.currentAt}).`,
+              ...changes.flips.map((f) => `${f.company}: ${f.from} -> ${f.to} (${f.confidenceFrom}% -> ${f.confidenceTo}%).`),
+              ...changes.confidenceMoves.map((m) => `${m.company}: confidence ${m.from}% -> ${m.to}%.`),
+              ...changes.added.map((a) => `New thread: ${a}.`),
+              ...changes.removed.map((r) => `Dropped thread: ${r}.`),
+            ].join("\n");
+      return {
+        content: [{ type: "text" as const, text }],
+        structuredContent: payload,
+      };
+    },
+  );
+
+  server.registerTool(
+    "stockintel_conflicting",
+    {
+      title: "Conflicting evidence",
+      description:
+        "What argues against acting on the latest thesis for a ticker: priced and unclear threads, " +
+        "the weakest clusters, and the grading contradiction count. Stored data only, never invented. " +
+        "Read-only, no key needed.",
+      inputSchema: {
+        ticker: z.string().max(12).describe("Ticker to challenge, e.g. NVDA."),
+      },
+    },
+    async ({ ticker }) => {
+      const { agentConflicting } = await import("@/lib/orchestrator/agent-read");
+      const c = await agentConflicting(ticker);
+      const text = !c.found
+        ? c.note
+        : [
+            `Contradictions in grading: ${c.contradictions}.`,
+            ...c.against.map((a) => `${a.company} reads ${a.verdict} (${a.confidence}%): ${a.marketCall}`),
+            ...c.weakestClusters.map(
+              (w) => `Thin ice: ${w.company} stands on ${w.independentSources} independent sources.`,
+            ),
+            c.note,
+          ]
+            .filter(Boolean)
+            .join("\n");
+      return {
+        content: [{ type: "text" as const, text }],
+        structuredContent: c,
+      };
+    },
+  );
+
+  server.registerTool(
+    "stockintel_evidence",
+    {
+      title: "Evidence drill-down",
+      description:
+        "Drill from one thesis thread into its support: verdict, sources, the matching evidence " +
+        "cluster, and the top underlying claims with evidence. Thesis, claim, evidence, source. " +
+        "Read-only, no key needed.",
+      inputSchema: {
+        ticker: z.string().max(12).describe("Ticker, e.g. NVDA."),
+        company: z.string().max(120).describe("Company thread to drill into, e.g. NVIDIA."),
+      },
+    },
+    async ({ ticker, company }) => {
+      const { agentEvidence } = await import("@/lib/orchestrator/agent-read");
+      const e = await agentEvidence(ticker, company);
+      const text = !e.found
+        ? e.note
+        : [
+            `${e.company} reads ${e.verdict}: ${e.marketCall}`,
+            ...(e.cluster ? [`Cluster: ${e.cluster.topClaim} (${e.cluster.independentSources} independent sources).`] : []),
+            ...e.claims.map((c) => `- ${c.claim} [${c.confidence}]`),
+          ].join("\n");
+      return {
+        content: [{ type: "text" as const, text }],
+        structuredContent: e,
       };
     },
   );

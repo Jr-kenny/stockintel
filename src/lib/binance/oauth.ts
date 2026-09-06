@@ -17,7 +17,7 @@ export function appOrigin(): string {
   const raw =
     process.env["PUBLIC_APP_URL"]?.trim() ||
     process.env["PUBLIC_SUBMIT_URL"]?.trim() ||
-    "https://stockintel-eight.vercel.app";
+    "https://stockintelislive.vercel.app";
   return raw.replace(/\/+$/, "");
 }
 

@@ -93,6 +93,15 @@ export async function handleConnectorApi(request: Request): Promise<Response> {
   if (request.method === "POST" && url.pathname === "/api/market/clusters") {
     return marketClustersRoute(request);
   }
+  if (request.method === "POST" && url.pathname === "/api/market/changes") {
+    return marketChangesRoute(request);
+  }
+  if (request.method === "POST" && url.pathname === "/api/market/conflicting") {
+    return marketConflictingRoute(request);
+  }
+  if (request.method === "POST" && url.pathname === "/api/market/evidence") {
+    return marketEvidenceRoute(request);
+  }
   return json({ error: "Not found" }, 404);
 }
 
@@ -143,6 +152,60 @@ async function marketClustersRoute(request: Request): Promise<Response> {
   }
   const { agentClusters } = await import("@/lib/orchestrator/agent-read");
   return json(await agentClusters(parsed.data.ticker));
+}
+
+/** What changed between the last two assessments, plus history. */
+async function marketChangesRoute(request: Request): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Invalid JSON" }, 400);
+  }
+  const parsed = tickerSchema.safeParse(body);
+  if (!parsed.success) {
+    return json({ error: "Validation failed", issues: parsed.error.issues }, 400);
+  }
+  const { agentThesisChanges, agentHistory } = await import("@/lib/orchestrator/agent-read");
+  const [changes, history] = await Promise.all([
+    agentThesisChanges(parsed.data.ticker),
+    agentHistory(parsed.data.ticker),
+  ]);
+  return json({ ...changes, history: history.runs });
+}
+
+/** What argues against the latest thesis, from stored data only. */
+async function marketConflictingRoute(request: Request): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Invalid JSON" }, 400);
+  }
+  const parsed = tickerSchema.safeParse(body);
+  if (!parsed.success) {
+    return json({ error: "Validation failed", issues: parsed.error.issues }, 400);
+  }
+  const { agentConflicting } = await import("@/lib/orchestrator/agent-read");
+  return json(await agentConflicting(parsed.data.ticker));
+}
+
+/** Drill from one thesis thread into its support. */
+async function marketEvidenceRoute(request: Request): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Invalid JSON" }, 400);
+  }
+  const parsed = z
+    .object({ ticker: z.string().min(1).max(12), company: z.string().min(1).max(120) })
+    .safeParse(body);
+  if (!parsed.success) {
+    return json({ error: "Validation failed", issues: parsed.error.issues }, 400);
+  }
+  const { agentEvidence } = await import("@/lib/orchestrator/agent-read");
+  return json(await agentEvidence(parsed.data.ticker, parsed.data.company));
 }
 async function marketReadRoute(request: Request): Promise<Response> {
   let body: unknown;

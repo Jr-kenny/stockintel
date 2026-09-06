@@ -20,14 +20,14 @@ Two ways in, as an MCP server, or as plain HTTP.
 
 ```bash
 claude mcp add binance-mcp-server --transport http https://agent.binance.com/mcp/agentic
-claude mcp add stockintel --transport http https://stockintel-eight.vercel.app/mcp
+claude mcp add stockintel --transport http https://stockintelislive.vercel.app/mcp
 ```
 
-Then call `stockintel_read`, `stockintel_assess`, `stockintel_clusters`, `stockintel_status`. Ask for the thesis with `stockintel_assess`, for grouped evidence without verdicts with `stockintel_clusters`.
+Then call `stockintel_read`, `stockintel_assess`, `stockintel_clusters`, `stockintel_thesis_changes`, `stockintel_conflicting`, `stockintel_evidence`, `stockintel_status`. Ask for the thesis with `stockintel_assess`, for grouped evidence without verdicts with `stockintel_clusters`, for what changed with `stockintel_thesis_changes`, for the counter-case with `stockintel_conflicting`, and drill into one thread with `stockintel_evidence`.
 
 **When both servers are connected, fetch the market leg first.** Call your Binance market-data tools for the tickers, then pass those results verbatim into `stockintel_read` as `binance_market_data`. StockIntel reads price and 24h change out of them and marks that leg caller-supplied. Omit it and StockIntel resolves the same public numbers itself through Agent OS or the mirror.
 
-**HTTP.** Base URL: `https://stockintel-eight.vercel.app`.
+**HTTP.** Base URL: `https://stockintelislive.vercel.app`.
 
 ## Commands
 
@@ -37,6 +37,9 @@ Then call `stockintel_read`, `stockintel_assess`, `stockintel_clusters`, `stocki
 | Read with your own exchange leg | `POST /api/market/read` `{"tickers":["BTC"],"binance_market_data":{...}}` |
 | Full thesis for a ticker | `POST /api/market/assess` `{"ticker":"NVDA"}` |
 | Evidence clusters without verdicts | `POST /api/market/clusters` `{"ticker":"NVDA"}` |
+| What changed between assessments | `POST /api/market/changes` `{"ticker":"NVDA"}` |
+| What argues against the thesis | `POST /api/market/conflicting` `{"ticker":"NVDA"}` |
+| Drill into one thread | `POST /api/market/evidence` `{"ticker":"NVDA","company":"NVIDIA"}` |
 | Is StockIntel live on Agent OS | `GET /api/binance/status` |
 
 ```bash

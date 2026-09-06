@@ -30,7 +30,7 @@ Option 1, MCP client:
 
 1. Add both servers:
    `claude mcp add binance-mcp-server --transport http https://agent.binance.com/mcp/agentic`
-   `claude mcp add stockintel --transport http https://stockintel-eight.vercel.app/mcp`
+   `claude mcp add stockintel --transport http https://stockintelislive.vercel.app/mcp`
 2. Authenticate the Binance server in the browser and fund an Agentic sub-account.
 3. Call `stockintel_read` with tickers, passing your Binance tool output as `binance_market_data` for the exchange leg.
 
