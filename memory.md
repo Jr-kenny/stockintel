@@ -1,5 +1,11 @@
 # Memory
 
+## 2026-09-06 — Luna tools plus live URL move
+
+- Live URL is stockintelislive everywhere now. PUBLIC_SUBMIT_URL in Vercel dashboard still needs the manual update.
+- Added Luna's top three as honest reads of stored runs: thesis changes with history, conflicting evidence, evidence drill. Skipped catalysts and risk factors, no structured data behind them.
+- Verified against real Sept 4 and 5 NVDA runs, including a genuine unclear-to-priced flip. Committed e58fc1e and pushed.
+
 ## 2026-09-06 — Agent intelligence tools
 
 - Calling agents get granularity now: stockintel_assess for the full thesis, stockintel_clusters for grouped evidence without verdicts, stockintel_read for market context.
