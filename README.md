@@ -242,6 +242,16 @@ StockIntel runs end to end today:
 
 Built for Track A of the Binance Agent OS Mini Hackathon.
 
+## For agents (MCP + HTTP)
+
+StockIntel runs next to the Binance MCP server inside your own agent session. Add it once:
+
+```bash
+claude mcp add stockintel --transport http https://stockintelislive.vercel.app/mcp
+```
+
+VS Code picks up both servers from the repo's `.vscode/mcp.json`. Cursor takes the same URL as a Streamable HTTP server. Then call `stockintel_read` for market context, `stockintel_assess` for the thesis, `stockintel_clusters` for evidence without verdicts, `stockintel_thesis_changes` for what moved, `stockintel_conflicting` for the counter-case, `stockintel_evidence` to drill into one thread, and `stockintel_investigate` plus `stockintel_inquiry` to run the full ten-specialist grid. Pass your own Binance tool output as `binance_market_data` and that leg reports caller-supplied. Every tool has an HTTP twin under `/api/market`. Full contract in `skills/stockintel/SKILL.md`.
+
 ## Built by Prime Isles
 
 Prime Isles is an independent engineering team focused on AI, autonomous agents, Web3, developer infrastructure, and building systems that turn complex information into useful action.
