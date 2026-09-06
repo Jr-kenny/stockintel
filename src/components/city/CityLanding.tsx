@@ -182,6 +182,7 @@ export function CityLanding() {
           <div className="city-cta">
             <Link to="/app" className="city-btn city-btn-solid">Run your first watch</Link>
             <Link to="/how-it-works" className="city-btn">How the loop works</Link>
+            <Link to="/connect-agent" className="city-btn">Connect your agent</Link>
           </div>
           <ul className="city-stats">
             <li>Evidence per edge</li>

@@ -116,75 +116,12 @@ function HowItWorks() {
           <Link to="/trust" className="text-signal underline underline-offset-4">
             See how we show our work
           </Link>
+          . Agents plug in too.{" "}
+          <Link to="/connect-agent" className="text-signal underline underline-offset-4">
+            Connect your agent
+          </Link>
           .
         </p>
-
-        <section className="mt-16 rounded-md border border-border bg-card p-6 sm:p-8" aria-labelledby="connect-agent">
-          <p className="label-mono text-signal">For agents</p>
-          <h2 id="connect-agent" className="mt-3 font-display text-2xl">
-            Connect your agent
-          </h2>
-          <p className="mt-3 max-w-2xl text-base leading-relaxed text-muted-foreground">
-            StockIntel runs next to the Binance server inside your own agent session. Add us
-            once, then ask for market reads, theses, evidence, or a fresh live investigation.
-            Read-only, no key needed.
-          </p>
-
-          <div className="mt-8 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-sm border border-border bg-background p-4">
-              <p className="label-mono text-muted-foreground">Claude Code</p>
-              <pre className="mt-2 overflow-x-auto font-mono text-xs leading-relaxed">
-                claude mcp add stockintel --transport http https://stockintelislive.vercel.app/mcp
-              </pre>
-            </div>
-            <div className="rounded-sm border border-border bg-background p-4">
-              <p className="label-mono text-muted-foreground">VS Code</p>
-              <p className="mt-2 font-mono text-xs leading-relaxed text-muted-foreground">
-                Open this repo. Both servers start from .vscode/mcp.json, then MCP List Servers,
-                authenticate the Binance one.
-              </p>
-            </div>
-            <div className="rounded-sm border border-border bg-background p-4">
-              <p className="label-mono text-muted-foreground">Cursor</p>
-              <p className="mt-2 font-mono text-xs leading-relaxed text-muted-foreground">
-                Settings, MCP, add https://stockintelislive.vercel.app/mcp as a Streamable HTTP
-                server.
-              </p>
-            </div>
-            <div className="rounded-sm border border-border bg-background p-4">
-              <p className="label-mono text-muted-foreground">ChatGPT and Codex</p>
-              <p className="mt-2 font-mono text-xs leading-relaxed text-muted-foreground">
-                Add the same URL as a connector in settings, then authenticate.
-              </p>
-            </div>
-          </div>
-
-          <h3 className="mt-8 font-display text-xl">What each call does</h3>
-          <ul className="mt-4 space-y-3">
-            {[
-              ["stockintel_read", "Live prices, 24h move, and the positioning gauge for up to 20 tickers."],
-              ["stockintel_assess", "The full thesis for a ticker, priced or not, with market calls."],
-              ["stockintel_clusters", "Grouped evidence per exposure, no verdicts."],
-              ["stockintel_thesis_changes", "What moved between the last two assessments, plus history."],
-              ["stockintel_conflicting", "What argues against the latest thesis, from stored data only."],
-              ["stockintel_evidence", "Drill one thread down to sources, cluster, and top claims."],
-              ["stockintel_investigate", "Starts the full ten-specialist grid, returns an inquiry id."],
-              ["stockintel_inquiry", "Polls that investigation to the finished thesis."],
-              ["stockintel_status", "Whether this deployment holds its own Agent OS session."],
-            ].map(([name, body]) => (
-              <li key={name} className="border-t border-border pt-3">
-                <p className="font-mono text-sm text-signal">{name}</p>
-                <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">{body}</p>
-              </li>
-            ))}
-          </ul>
-
-          <p className="mt-8 max-w-2xl text-base leading-relaxed text-muted-foreground">
-            Prefer plain web requests? Every tool above has an HTTP twin under /api/market, and
-            your own Binance numbers ride along as caller-supplied context. The full contract
-            lives in skills/stockintel/SKILL.md in the repo.
-          </p>
-        </section>
       </section>
     </div>
   );
