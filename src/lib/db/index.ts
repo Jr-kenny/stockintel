@@ -279,6 +279,8 @@ export async function ensureSchema() {
     "ALTER TABLE inquiries ADD COLUMN grade_error TEXT",
     "ALTER TABLE inquiries ADD COLUMN synthesis_json TEXT",
     "ALTER TABLE inquiries ADD COLUMN investigation_json TEXT",
+    "ALTER TABLE inquiries ADD COLUMN connection_json TEXT",
+    "ALTER TABLE inquiries ADD COLUMN connect_mode TEXT",
     "ALTER TABLE inquiries ADD COLUMN identity TEXT",
     "ALTER TABLE opportunities ADD COLUMN anchor_root TEXT",
     "ALTER TABLE opportunities ADD COLUMN anchor_tx TEXT",

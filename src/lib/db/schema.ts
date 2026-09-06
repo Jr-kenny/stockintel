@@ -44,6 +44,14 @@ export const inquiries = sqliteTable("inquiries", {
   gradeError: text("grade_error"),
   synthesisJson: text("synthesis_json"),
   investigationJson: text("investigation_json"),
+  /**
+   * Connection pass output: interpreted evidence plus named causal chains.
+   * Written before synthesis, which reads from it instead of reasoning from
+   * four truncated claim rows.
+   */
+  connectionJson: text("connection_json"),
+  /** "llm" when a model connected the evidence, "deterministic" when it fell back. */
+  connectMode: text("connect_mode"),
   /** Persisted Binance snapshot taken at synthesis time (for outcome reflection). */
   marketJson: text("market_json"),
   error: text("error"),

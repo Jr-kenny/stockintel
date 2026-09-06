@@ -76,12 +76,14 @@ function clamp01(n: unknown): number {
 }
 
 function buildUserPrompt(question: string, claims: ClaimForLlmGrade[], offset: number): string {
+  // The collector's own confidence is deliberately NOT shown. Anchoring the
+  // grader to a scraper's guess is how that guess became the analyst's number
+  // in the first place. Judge the evidence, not someone else's score of it.
   const lines = claims.map((c, i) =>
     JSON.stringify({
       i: i + offset,
       company: c.company,
       claim: c.claim,
-      agent_confidence: c.confidence,
       evidence: c.evidence.map((ev) => ({
         item: ev.item,
         source: ev.source,

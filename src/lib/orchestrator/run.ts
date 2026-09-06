@@ -34,6 +34,8 @@ import {
 } from "@/lib/memory";
 import { generateHypotheses } from "./hypothesis";
 import { buildInitialInvestigation } from "./investigation";
+import { connectEvidence } from "./connect";
+import { buildMarketSnapshot } from "@/lib/binance/market";
 import { buildEvidenceGraph } from "./evidence-graph";
 import { computeBreakdown, detectContradictions } from "./scoring";
 import { runFollowUpRounds } from "./recurse";
@@ -890,6 +892,44 @@ export async function gradeAndSynthesize(inquiryId: string) {
         updatedAt: nowIso(),
       })
       .where(eq(inquiries.id, inquiryId));
+
+    // Connection pass — the analyst step. Runs on the FULL graded set before
+    // synthesis, so the report is written from named causal chains rather than
+    // from four truncated claim rows. Failure here is not fatal: synthesis can
+    // still write from the readout, it just has less to work with.
+    try {
+      // Market context for the connection pass. Best-effort: the chains are
+      // about the events, and a missing snapshot must not cost us the analysis.
+      let marketBlock = "";
+      try {
+        const snap = await buildMarketSnapshot(
+          cappedGraded.map((g) => g.company),
+          inquiry.question,
+          inquiry.identity ?? null,
+        );
+        marketBlock = snap.lines.join("\n");
+      } catch {
+        // no snapshot, chains still stand on the evidence
+      }
+      const connection = await connectEvidence({
+        question: inquiry.question,
+        graded: cappedGraded,
+        marketBlock,
+      });
+      await db
+        .update(inquiries)
+        .set({
+          connectionJson: JSON.stringify(connection),
+          connectMode: connection.mode,
+          updatedAt: nowIso(),
+        })
+        .where(eq(inquiries.id, inquiryId));
+      console.log(
+        `[connect] ${connection.mode}: ${connection.evidence.length} events, ${connection.chains.length} chain(s)`,
+      );
+    } catch (err) {
+      console.error("connection pass failed (synthesis continues):", err);
+    }
 
     try {
       await synthesizeInquiry(inquiryId);

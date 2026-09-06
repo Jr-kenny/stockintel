@@ -7,13 +7,23 @@
  *  - Tiers: discovery (new clusters) > confirmation (corroborates without new
  *    clusters) > duplication (everything already seen from same sources).
  *  - Weight = relevance × quality × independence × reliability × impact.
+ *  - Quality is judged HERE from the evidence (publisher tier, freshness,
+ *    corroboration), not taken from the collector. Agents report what they
+ *    found; they do not score their own findings.
  */
+
+import { judgeQuality, type SourceTier } from "./source-quality";
 
 export type SubmittedEvidence = { item: string; source: string; observed: string };
 
 export type SubmittedClaim = {
   company: string;
   claim: string;
+  /**
+   * Legacy collector-supplied score. Ignored by grading and retained only so
+   * older stored rows and unmigrated agents still parse. Do not read it for
+   * judgment; see source-quality.judgeQuality.
+   */
   confidence: number;
   evidence: SubmittedEvidence[];
   whyRelevant?: string | null;
@@ -30,6 +40,12 @@ export type GradedClaim = SubmittedClaim & {
     reliability: number;
     impact: number;
   };
+  /** Why quality scored the way it did, in words, for the report. */
+  qualityReason: string;
+  /** Best source tier behind this claim: primary, wire, trade, general, aggregator. */
+  sourceTier: SourceTier;
+  /** Distinct non-aggregator publishers. The real corroboration count. */
+  independentPublishers: number;
 };
 
 export function sourceClusterKey(source: string): string {
@@ -120,7 +136,9 @@ export function gradeClaims({ claims, agents }: GradeInput): GradeOutput {
     else if (uniqueKeys.length > 0) tier = "confirmation";
     else tier = "duplication";
 
-    const quality = clamp01(c.confidence);
+    // Quality from the evidence itself, never from the collector's own number.
+    const judged = judgeQuality(c.evidence);
+    const quality = judged.quality;
     // Relevance: the grid never pre-filters, so an agent responding at all IS
     // its own relevance judgment. The LLM pass in ./llm-grade refines this
     // later; misjudged responses erode the agent's reliability instead.
@@ -150,6 +168,9 @@ export function gradeClaims({ claims, agents }: GradeInput): GradeOutput {
         impact: round2(impact),
       },
       weight: round4(weight),
+      qualityReason: judged.reason,
+      sourceTier: judged.bestTier,
+      independentPublishers: judged.independentPublishers,
     };
   });
 
