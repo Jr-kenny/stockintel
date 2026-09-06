@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-09-06 — Thesis first
+
+- Live investigation leads everywhere now: first tool, first skill entry, first demo step. Stored reads are labeled memory and admit age past a day.
+- Connect page shows an example thesis so the orchestrator synthesis, not the plumbing, is the star.
+
 ## 2026-09-06 — Connect-agent page
 
 - Connect your agent is its own page at /connect-agent now, third button under How the loop works on the landing hero. How-it-works links out to it. Verified 200 on prod.
