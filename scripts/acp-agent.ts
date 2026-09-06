@@ -1,6 +1,6 @@
 /**
- * Virtuals ACP agent — the always-on node that sells demand readouts on the
- * Agent Commerce Protocol and can buy specialist intel from registry agents.
+ * Virtuals ACP agent — buyer-side node for specialist intel from the
+ * Agent Commerce Protocol registry.
  *
  *   bun scripts/acp-agent.ts
  *
@@ -22,24 +22,6 @@ const agent = await createAcpAgent();
 
 agent.on("entry", async (session: JobSession, entry: JobRoomEntry) => {
   try {
-    if (
-      entry.kind === "message" &&
-      entry.contentType === "requirement" &&
-      session.status === "open"
-    ) {
-      console.log(`[acp] new requirement in job ${session.jobId}`);
-      const { handleAcpEntry, parseIntelRequest } = await import("../src/lib/virtuals/acp");
-      const handled = await handleAcpEntry(session, entry);
-      if (!handled) {
-        const req = parseIntelRequest(entry.content ?? "");
-        await session.sendMessage(
-          req
-            ? "Request received but the pipeline failed — no charge."
-            : "Unsupported requirement. This offering accepts intel-request JSON only.",
-        );
-      }
-      return;
-    }
     if (entry.kind === "system") {
       switch (entry.event.type) {
         case "budget.set":

@@ -11,24 +11,9 @@ import {
   getInquiry,
   listSupplyRecords,
   submitInquiry,
-  submitPaidInquiry,
   listMyRuns,
   latestActiveRun,
 } from "@/lib/orchestrator/fns";
-import {
-  getAccount,
-  verifyTopup,
-  runPriceInvoice,
-  getWalletBalance,
-} from "@/lib/orchestrator/account-fns";
-
-type AccountView = {
-  id: string;
-  credits: number;
-  freeRunsUsed: number;
-  freeRunsLeft: number;
-  priceUsd: number;
-};
 export const Route = createFileRoute("/app/")({
   head: () => ({
     meta: [
@@ -175,13 +160,6 @@ function Intelligence() {
   const [inquiry, setInquiry] = useState<InquiryState | null>(null);
   const [supply, setSupply] = useState<Awaited<ReturnType<typeof listSupplyRecords>>>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [account, setAccount] = useState<AccountView | null>(null);
-  const [paywall, setPaywall] = useState<{ priceUsd: number; paymentWallet?: string } | null>(null);
-  const [topup, setTopup] = useState<{ state: "idle" | "sent"; txHash: string } | null>(null);
-  const [paying, setPaying] = useState(false);
-  const [payError, setPayError] = useState<string | null>(null);
-  const [walletEth, setWalletEth] = useState<number | null>(null);
-  const [invoice, setInvoice] = useState<{ amountEth: string; rate: number; amountWei: string } | null>(null);
   const [history, setHistory] = useState<RunHistoryRow[]>([]);
   const pollRef = useRef<number | null>(null);
   const [privy, setPrivy] = useState<PrivyIdentityInfo>({
@@ -191,58 +169,10 @@ function Intelligence() {
     firstWallet: null,
   });
   const identity = privy.email ?? privy.walletAddress ?? null;
-  const connectedAddress = privy.firstWallet?.address ?? privy.walletAddress;
 
   useEffect(() => {
     void listSupplyRecords().then(setSupply);
   }, []);
-
-  useEffect(() => {
-    if (!identity) {
-      setAccount(null);
-      return;
-    }
-    void getAccount({
-      data: {
-        identity,
-        email: privy.email ?? undefined,
-        wallet: privy.walletAddress ?? undefined,
-      },
-    }).then(setAccount);
-  }, [identity, privy.email, privy.walletAddress]);
-
-  // Live wallet balance for the paywall. Refreshes on
-  // sign-in and right after any payment so "empty" is never a surprise.
-  const refreshBalance = useCallback(() => {
-    if (!connectedAddress) return;
-    void getWalletBalance({ data: { address: connectedAddress } }).then((r) => {
-      if (r.ok) setWalletEth(r.eth);
-    });
-  }, [connectedAddress]);
-
-  useEffect(() => {
-    refreshBalance();
-  }, [refreshBalance]);
-
-  // Fetch live ETH price for the paywall. Refreshes while the paywall is up and every 60s.
-  useEffect(() => {
-    if (!paywall) {
-      setInvoice(null);
-      return;
-    }
-    let cancelled = false;
-    const load = () => {
-      void runPriceInvoice().then((inv) => {
-        if (!cancelled) setInvoice({ amountEth: (inv as unknown as { amountEth: string }).amountEth, rate: (inv as unknown as { rate: number }).rate, amountWei: (inv as unknown as { amountWei: string }).amountWei });
-      });
-    };
-    load();
-    const t = window.setInterval(load, 60_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(t);
-    };
-  }, [paywall]);
 
   useEffect(
     () => () => {
@@ -351,7 +281,6 @@ function Intelligence() {
     if (submitting || phase === "running") return;
     const submittedQuery = query;
     setSubmitting(true);
-    setPaywall(null);
     const result = await submitInquiry({
       data: {
         question: submittedQuery,
@@ -371,73 +300,6 @@ function Intelligence() {
       poll(result.inquiryId);
       // Smooth scroll into results phase
       requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
-    } else if ("reason" in result && result.reason === "out_of_credits") {
-      setPaywall({
-        priceUsd: result.priceUsd,
-        ...(result.paymentWallet ? { paymentWallet: result.paymentWallet } : {}),
-      });
-    }
-  }
-
-  async function verifyPayment() {
-    if (!topup?.txHash || !identity || !paywall) return;
-    setSubmitting(true);
-    const result = await verifyTopup({ data: { identity, txHash: topup.txHash } });
-    setSubmitting(false);
-    if (result.ok) {
-      setAccount(await getAccount({ data: { identity } }));
-      setTopup(null);
-      setPaywall(null);
-    } else {
-      alert(result.error);
-    }
-  }
-
-  async function payAndRun() {
-    if (!identity || !paywall?.paymentWallet) return;
-    const connected = privy.firstWallet;
-    if (!connected) {
-      setPayError("No wallet connected. Sign in again with a wallet-enabled account.");
-      return;
-    }
-    setPaying(true);
-    setPayError(null);
-    try {
-      const invoice = await runPriceInvoice();
-      if (!invoice?.wallet) throw new Error("Payments not configured.");
-      const provider = await connected.getEthereumProvider();
-      const [from] = (await provider.request({ method: "eth_requestAccounts" })) as string[];
-      const amountHex = "0x" + BigInt(invoice.amountWei).toString(16);
-      const txHash = (await provider.request({
-        method: "eth_sendTransaction",
-        params: [{ from, to: invoice.wallet, value: amountHex }],
-      })) as string;
-
-      const result = await submitPaidInquiry({
-        data: {
-          txHash,
-          question: query,
-          identity,
-          ...(privy.email ? { email: privy.email } : {}),
-          ...(privy.walletAddress ? { wallet: privy.walletAddress } : {}),
-        },
-      });
-      if (result.ok) {
-        setAccount(await getAccount({ data: { identity } }));
-        setPaywall(null);
-        setQuery("");
-        setPhase("running");
-        refreshBalance();
-        poll(result.inquiryId);
-        requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
-      } else {
-        setPayError(result.error);
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setPayError(msg.includes("rejected") ? "Payment was cancelled." : msg.slice(0, 160));
-    } finally {
-      setPaying(false);
     }
   }
 
@@ -471,15 +333,6 @@ function Intelligence() {
                   <label htmlFor="intent" className="label-mono text-muted-foreground">
                     Name a ticker or describe the exposure
                   </label>
-                  {account && (
-                    <span className="label-mono text-signal">
-                      {account.freeRunsLeft > 0
-                        ? `${account.freeRunsLeft} free ${account.freeRunsLeft === 1 ? "run" : "runs"} left`
-                        : account.credits > 0
-                          ? `${account.credits} ${account.credits === 1 ? "credit" : "credits"} left`
-                          : "no runs left"}
-                    </span>
-                  )}
                 </div>
                 <textarea
                   id="intent"
@@ -515,47 +368,6 @@ function Intelligence() {
                 </div>
               </form>
             </RequireAuth>
-
-            {paywall && (
-              <div className="surface-dark mt-5 p-5 sm:p-6" aria-label="Payment needed">
-                <p className="label-mono text-signal">Free runs used up</p>
-                <h3 className="mt-2 font-display text-2xl text-vellum">
-                  ${paywall.priceUsd} per intelligence run
-                </h3>
-                {invoice ? (
-                  <p className="mt-1 font-mono text-xs text-signal">
-                    {invoice.amountEth} ETH at ${invoice.rate.toLocaleString(undefined, { maximumFractionDigits: 2 })} / ETH · live price
-                  </p>
-                ) : (
-                  <p className="mt-1 font-mono text-xs text-ink-muted">fetching live ETH price…</p>
-                )}
-                <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
-                  Pay from your wallet and the run starts immediately. The payment goes
-                  {paywall.paymentWallet ? " directly to StockIntel" : ""} on Base chain and is
-                  verified before your request dispatches.
-                </p>
-                {payError && (
-                  <p className="mt-4 border-l-2 border-flag pl-4 font-mono text-xs leading-relaxed text-flag">
-                    {payError}
-                  </p>
-                )}
-                {privy.firstWallet && paywall.paymentWallet ? (
-                  <button
-                    type="button"
-                    onClick={payAndRun}
-                    disabled={paying}
-                    className="app-signal-button mt-5 disabled:opacity-60"
-                  >
-                    {paying ? "Waiting for payment…" : invoice ? `Pay ${invoice.amountEth} ETH ($${paywall.priceUsd}) & run` : `Pay $${paywall.priceUsd} & run`}
-                    {!paying && <ArrowUpRight className="size-3.5" aria-hidden />}
-                  </button>
-                ) : (
-                  <p className="mt-4 font-mono text-xs text-flag">
-                    Sign in with a wallet-enabled account to pay for runs.
-                  </p>
-                )}
-              </div>
-            )}
 
             <div className="mt-3 flex flex-wrap gap-2">
               {EXAMPLES.filter((ex) => ex !== query).map((example) => (

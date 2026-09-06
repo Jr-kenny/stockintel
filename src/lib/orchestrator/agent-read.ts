@@ -3,9 +3,9 @@
  * behind both the MCP tools and the HTTP routes so the surfaces never drift.
  *
  * Reads serve the latest COMPLETED run matching a ticker, never a live grid
- * run: a full investigation takes minutes and spends credits, while a tool
- * call must answer in seconds. No assessment yet reads as an honest empty,
- * never a guess. Workspace identities never leave this module.
+ * run: a full investigation takes minutes while a tool call must answer in
+ * seconds. No assessment yet reads as an honest empty, never a guess.
+ * Workspace identities never leave this module.
  */
 
 import { z } from "zod";

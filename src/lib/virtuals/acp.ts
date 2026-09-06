@@ -1,18 +1,11 @@
 /**
  * Virtuals ACP (Agent Commerce Protocol) integration — SDK v2.
  *
- * PrimeBaseLayer participates in the Agent Economy on BOTH sides:
- *
- *  SELL — the orchestrator lists a "demand-readout" offering: other ACP
- *  agents can buy a synthesized demand intelligence readout, paid in USDC
- *  escrowed by ACP on Base. The buyer message is the inquiry; our deliverable
- *  is the readout JSON.
- *
- *  BUY — grid specialists can ALSO live in the Virtuals registry. The
- *  orchestrator discovers them with browseAgents() and dispatches inquiry
- *  slices as ACP jobs instead of (or alongside) connector-protocol HTTP
- *  commands. Evidence comes back through the job room; payment releases
- *  from ACP escrow only when we accept the deliverable.
+ * PrimeBaseLayer participates in the Agent Economy as a buyer:
+ *  grid specialists can live in the Virtuals registry. The orchestrator
+ *  discovers them with browseAgents() and dispatches inquiry slices as ACP
+ *  jobs instead of (or alongside) connector-protocol HTTP commands. Evidence
+ *  comes back through the job room.
  *
  * Failure posture mirrors the whole platform: if ACP is not configured
  * (no wallet env) every function here no-ops and the network keeps running
@@ -134,19 +127,6 @@ export async function createAcpAgent(): Promise<AcpAgent> {
   return Agent.create({ evmProvider: adapter });
 }
 
-/**
- * The offering we sell on the ACP registry. Judges can find it via agent
- * discovery and buy a real readout — that is Virtuals doing real work.
- */
-export const DEMAND_READOUT_OFFERING = {
-  name: "prime-base-demand-readout",
-  description:
-    "B2B demand intelligence readout. Send your supply or question " +
-    "(e.g. 'I have 5000 TCL TVs available in Nigeria') and receive a " +
-    "synthesized readout: companies showing emerging demand, confidence " +
-    "scores, independent source counts, and evidence trails.",
-} as const;
-
 /** Shape of the requirement payload we send when BUYING intel via ACP jobs. */
 export type IntelRequest = {
   type: "intel-request";
@@ -157,24 +137,6 @@ export type IntelRequest = {
   wants: "claims+evidence";
   window_seconds: number;
 };
-
-/** Parse an inbound ACP job's requirement message into an intel request. */
-export function parseIntelRequest(raw: string): IntelRequest | null {
-  try {
-    const parsed = JSON.parse(raw) as Partial<IntelRequest>;
-    if (parsed.type !== "intel-request" || !parsed.inquiry_id || !parsed.question) return null;
-    return {
-      type: "intel-request",
-      inquiry_id: parsed.inquiry_id,
-      question: parsed.question,
-      scope: parsed.scope ?? {},
-      wants: "claims+evidence",
-      window_seconds: typeof parsed.window_seconds === "number" ? parsed.window_seconds : 300,
-    };
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Discover specialist agents in the Virtuals registry for an inquiry slice.
@@ -209,13 +171,14 @@ export async function buyIntel(
   providerAddress: string,
   request: IntelRequest,
   priceUsd: number,
+  offeringName: string,
 ): Promise<{ jobId: string } | null> {
   if (!acpConfig().live) return null;
   try {
     const client = await createAcpAgent();
     const jobId = await client.createJobByOfferingName(
       acpChain().id,
-      DEMAND_READOUT_OFFERING.name,
+      offeringName,
       providerAddress,
       request as unknown as Record<string, unknown>,
     );
@@ -232,47 +195,4 @@ export async function buyIntel(
   }
 }
 
-/**
- * SELL side: handle one inbound ACP entry end-to-end. When a buyer's
- * requirement arrives we run the same orchestrator pipeline as a native
- * inquiry and submit the readout JSON as the deliverable; escrow releases
- * when the buyer completes. Returns true when the entry was handled as an
- * intel request.
- */
-export async function handleAcpEntry(session: unknown, entry: unknown): Promise<boolean> {
-  const s = session as {
-    status?: string;
-    sendMessage?: (content: string) => Promise<void>;
-    submit?: (deliverable: string) => Promise<void>;
-  };
-  const e = entry as { kind?: string; contentType?: string; content?: string };
 
-  if (!e || e.kind !== "message" || e.contentType !== "requirement" || s?.status !== "open") {
-    return false;
-  }
-  const req = parseIntelRequest(e.content ?? "");
-  if (!req) return false;
-
-  try {
-    const { runInquirySync } = await import("@/lib/orchestrator/fns");
-    const result = await runInquirySync(req.question);
-    await s.submit!(
-      JSON.stringify({
-        schema: "prime-base.readout/v1",
-        inquiry_id: req.inquiry_id,
-        ...result,
-      }),
-    );
-    return true;
-  } catch (err) {
-    console.error("acp.handleAcpEntry failed:", err);
-    try {
-      await s.sendMessage?.(
-        `Intel request failed: ${err instanceof Error ? err.message : "error"} — no charge.`,
-      );
-    } catch {
-      // room may already be closed
-    }
-    return true; // entry consumed even on failure
-  }
-}

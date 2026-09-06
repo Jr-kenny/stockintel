@@ -93,14 +93,30 @@ is this repo. To pick up the collector change:
 - `synthesize.ts` still writes the legacy `synthesis_json`. Both objects are written
   per run so nothing is lost, but the old path is dead weight once the UI has been
   live on reports for a while.
-- Observation pass before hypothesis still missing: `generateHypotheses` gets only
-  the question string, which is why stored hypotheses read as model recollection.
+- Two-wave dispatch is live, observation gap closed by construction: wave one is a
+  short open sweep, hypotheses form from wave-one returns plus tape plus memory,
+  wave two is the aimed hunt. `observe.ts` stays as the cold-start fallback when
+  wave one returns nothing. Short sweep is `PRIME_WAVE1_WINDOW_SECONDS`, default 90s.
 - Agents still ignore `whatToVerify`, `investigation`, `memory_brief`,
   `memory_recheck`. All four are dispatched and read by nobody.
-- `graph_edges` still has no entity-to-entity relations, so a chain cannot be
-  persisted and traversed even though the connection pass now produces one.
-- `deriveFollowUpTasks` is still the hardcoded 3xN loop.
+- Chain persistence is live: `persistConnectionChains` writes each connection hop
+  as one entity-to-entity edge with basis in the claim prefix and evidence ids
+  in source, `entityChainsForInquiry` reads the traversable layer back. Base
+  graph build now clears per-inquiry rows first so retries stay idempotent.
+- Follow-up planner is live in `plan-followups.ts`: LLM picks 2 to 6 checks from
+  real gaps with the old loop as fallback. `deriveFollowUpTasks` stays as the
+  deprecated sync path. Recurse rounds call the planner.
 - 0G fenced-JSON parse failure is on our side, worth a look.
+- Paid runs removed 2026-09-06 per user direction: no metering, no pay-per-run,
+  no contributor payouts. Deleted `credits.ts`, `account-fns.ts`, `base/payments.ts`,
+  `base/payouts.ts`, plus `smoke-credits`, `smoke-pay-per-run`, `retry-payouts`,
+  `base-smoke` scripts. `run.ts` grades and reports with no settlement block,
+  `fns.ts` submits free, app page has no paywall or credit counts, workspace
+  agent rows carry no earnings. Schema tables stay for old DBs, nothing reads them.
+- ACP SELL side removed same day: `handleAcpEntry`, `DEMAND_READOUT_OFFERING`,
+  `parseIntelRequest` gone, `buyIntel` takes the offering name as a param, the
+  node script handles buyer events only. `tsc --noEmit` is clean and `bun run build`
+  passes.
 
 ## 2026-09-06 — Orchestrator verification plus target report architecture
 

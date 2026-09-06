@@ -7,7 +7,6 @@ import {
   evidenceRecords,
   inquiries,
   opportunities,
-  settlements,
   supplyRecords,
 } from "@/lib/db/schema";
 import { desc, eq, inArray } from "drizzle-orm";
@@ -91,8 +90,6 @@ export type AgentRow = {
   connectedAt: string;
   evidence: number;
   unique: number;
-  earnedUsd: number;
-  paidOg: number;
 };
 
 export type ContributionTier = "discovery" | "confirmation" | "duplication";
@@ -339,10 +336,9 @@ export const listSupplyLive = createServerFn({ method: "POST" })
 export const listAgentsLive = createServerFn({ method: "POST" }).handler(
   async (): Promise<AgentRow[]> => {
     await ensureSchema();
-    const [agentRows, claimRows, settleRows] = await Promise.all([
+    const [agentRows, claimRows] = await Promise.all([
       db.select().from(agents).orderBy(desc(agents.createdAt)),
       db.select().from(claims),
-      db.select().from(settlements),
     ]);
 
     return agentRows.map((a) => {
@@ -354,7 +350,6 @@ export const listAgentsLive = createServerFn({ method: "POST" }).handler(
             .filter(Boolean),
         ),
       );
-      const paid = settleRows.filter((s) => s.agentId === a.id);
       return {
         name: a.name,
         type:
@@ -386,8 +381,6 @@ export const listAgentsLive = createServerFn({ method: "POST" }).handler(
                 ),
               )
             : 0,
-        earnedUsd: Math.round(paid.reduce((s, r) => s + r.amountUsd, 0) * 100) / 100,
-        paidOg: Math.round(paid.reduce((s, r) => s + (r.paidOg ?? 0), 0) * 1e6) / 1e6,
       };
     });
   },

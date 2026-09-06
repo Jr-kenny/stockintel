@@ -20,8 +20,8 @@ export function RequireAuthFallback({
       <div>
         <h2 className="font-display text-xl text-vellum">Sign in to run this action</h2>
         <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
-          Intelligence runs and watchlist entries are tied to your workspace. They cost credits to
-          dispatch and stay private to your account. Sign in or create one to continue; email,
+          Intelligence runs and watchlist entries are tied to your workspace and stay
+          private to your account. Sign in or create one to continue; email,
           social accounts or a passkey all work.
         </p>
       </div>

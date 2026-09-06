@@ -53,14 +53,6 @@ export const submitInquiry = createServerFn({ method: "POST" })
     const id = newId("INQ");
     const ts = nowIso();
 
-    // Metering: signed-in businesses spend a free trial run or a credit.
-    // Guest mode (no identity passed) is unmetered so dev keeps working.
-    if (data.identity) {
-      const { consumeRun } = await import("./credits");
-      const spent = await consumeRun(data.identity, id);
-      if (!spent.ok) return spent;
-    }
-
     await db.insert(inquiries).values({
       id,
       identity: data.identity ?? null,
@@ -77,47 +69,6 @@ export const submitInquiry = createServerFn({ method: "POST" })
   });
 
 export type SynthesisSource = { label: string; url: string };
-
-const payRunSchema = z.object({
-  txHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
-  question: z.string().min(8).max(500),
-  identity: z.string().min(3).max(120),
-  email: z.string().max(160).optional(),
-  wallet: z.string().max(60).optional(),
-});
-
-/**
- * Pay-per-run entry: creates the inquiry, verifies the buyer's on-chain
- * payment for THIS inquiry, then dispatches. The payment is bound to the
- * inquiry id before it ever hits the grid.
- */
-export const submitPaidInquiry = createServerFn({ method: "POST" })
-  .validator((input: unknown) => payRunSchema.parse(input))
-  .handler(async ({ data }) => {
-    await ensureSchema();
-    const id = newId("INQ");
-    const ts = nowIso();
-
-    // Ensure the account exists, then verify their payment against it.
-    const { getOrCreateAccount } = await import("./credits");
-    const account = await getOrCreateAccount(data.identity, data.email, data.wallet);
-
-    const { verifyRunPayment } = await import("./credits");
-    const paid = await verifyRunPayment(data.txHash, id, account.id);
-    if (!paid.ok) return { ok: false as const, error: paid.error };
-
-    await db.insert(inquiries).values({
-      id,
-      identity: data.identity,
-      question: data.question,
-      status: "dispatching",
-      createdAt: ts,
-      updatedAt: ts,
-    });
-    const submitUrl = process.env["PUBLIC_SUBMIT_URL"] ?? "http://localhost:8080";
-    await runInquiry(id, `${submitUrl}/api/claims/submit`);
-    return { ok: true as const, inquiryId: id };
-  });
 
 export type SynthesisView = {
   preamble: string;
