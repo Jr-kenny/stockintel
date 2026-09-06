@@ -1,5 +1,13 @@
 # Memory
 
+## 2026-09-06 — Agent OS correction (unrecognized client)
+
+- Binance consent rejects any agent outside its approved clients, so the in-app OAuth authorize flow is removed entirely. It led to that error for everyone.
+- Session model now: BINANCE_MCP_TOKEN minted inside the operator's own supported client session, else public context with no key, else callers bring their exchange leg verbatim.
+- Official MCP SDK adopted for our client (stateless per call) and our own server at /mcp with stockintel_read and stockintel_status. POST /api/market/read serves outside agents over HTTP. Shared core in read.ts, provenance always labeled.
+- Copied from optic-binance: SDK usage, caller-supplied pattern, own-MCP-server shape, SKILL.md. Kept ours: personal watchlist, thesis pipeline, easiness.
+- zod v4 upgrade to unify with the SDK. Holdings now paste-based with the pre-ticked picker. Verified live: market read, MCP initialize and tools/call, caller-supplied provenance. Committed 4ea70cb and pushed.
+
 ## 2026-09-06 — Personal Agent OS (user revision)
 
 - Dropped the operator-only model per user direction. Every workspace links its own Agentic sub-account now.
