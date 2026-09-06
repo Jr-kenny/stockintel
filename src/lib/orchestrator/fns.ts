@@ -4,6 +4,9 @@ import { db, ensureSchema, nowIso, newId } from "@/lib/db";
 import { inquiries, agents, supplyRecords, accounts } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { runInquiry, tryGradeIfReady, SOURCING_WINDOW_SECONDS } from "@/lib/orchestrator/run";
+import { reportSchema, type IntelligenceReport } from "@/lib/orchestrator/report";
+
+export type { IntelligenceReport };
 
 const submitSchema = z.object({
   question: z.string().min(8).max(500),
@@ -202,6 +205,21 @@ export const getInquiry = createServerFn({ method: "POST" })
       claimsReceived: row.claimsReceived,
       sourcesClustered: row.sourcesClustered,
       readout: row.readoutJson ? readoutSchema.parse(JSON.parse(row.readoutJson)) : null,
+      /**
+       * The intelligence report. Null on runs from before the report pass, so
+       * the UI decides what to show rather than assuming it is there. A
+       * malformed report reads as absent instead of failing the whole poll.
+       */
+      report: (() => {
+        if (!row.reportJson) return null;
+        try {
+          return reportSchema.parse(JSON.parse(row.reportJson));
+        } catch (err) {
+          console.error("report parse failed, serving without it:", err);
+          return null;
+        }
+      })(),
+      reportMode: row.reportMode ?? null,
       synthesis: row.synthesisJson
         ? ({
             ...(synthesisSchema.parse(JSON.parse(row.synthesisJson)) as SynthesisView),

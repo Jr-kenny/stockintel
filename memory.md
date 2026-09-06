@@ -1,5 +1,107 @@
 # Memory
 
+## 2026-09-06 — Report shipped end to end, OpenRouter leads
+
+Built the target architecture from the audit below. Four commits: fa72836, 3ccfa7c,
+03dbd1e, 2937491, plus this one.
+
+### Pipeline now
+
+dispatch → grade (quality judged orchestrator-side) → connect (named causal chains)
+→ measure priced-in (event dates vs candles) → write report → render.
+
+New modules: `source-quality.ts`, `connect.ts`, `report.ts`, `write-report.ts`,
+`render-report.ts`, `event-reaction.ts`, `providers.ts`, `ReportView.tsx`.
+
+### Fixed from the audit
+
+- Recursion never ran: `depth 0` in state, local counter never synced, every
+  `shouldRecurse` branch gated on `depth === 1`. Synced plus widened to `<= 1`.
+- Ten agents were one Google News query (72 rows, 8 distinct claims). Each now owns
+  a BEAT (fetchers, publisher domains, query angles). Live probe returns disjoint
+  publisher sets. `scripts/sync-agent-body.ts` propagates the shared body,
+  `scripts/apply-beats.ts` writes the configs, both idempotent.
+- Collectors no longer judge: `confidence` fixed at 0 (kept on the wire for older
+  orchestrators), `whyRelevant` deleted from all ten. It was four hardcoded
+  templates keyed off a headline verb, and `grade.ts` read the adjacent confidence
+  straight into its quality dimension.
+- Quality now from publisher tier + freshness + independent corroboration, each
+  with a stated reason. The stored intellectia.ai claim went 0.70 → 0.21/low.
+- Priced-in measured, not asserted: a move beyond 1.5x the median daily band on the
+  session containing the event counts as absorbed. Old code gated on
+  `confidence >= 70`, which measured our sourcing, not the market.
+- Per-company thesis replaced by one report: executive first, evidence with
+  why-it-matters and our-read, synthesis chains, four horizons, scenarios with
+  invalidation, bottom line. `traceabilityIssues()` gates it.
+- Entity extraction fixed as a side effect: the connection pass drops headline
+  fragments ("TSMC Is", "Great AI Silicon") and resolves real entities.
+
+### Provider order
+
+OpenRouter leads, 0G and Zen behind. `src/lib/llm/providers.ts` owns it in one
+place, used by all five passes. Model picked by probing the real connect contract
+with a 7-event payload:
+
+- `minimax/minimax-m3:free` — 2/2 pass, 26-32s, ~2400 of 4000 tokens. CHOSEN.
+- `nvidia/nemotron-3-super-120b-a12b:free` — 1 pass then truncated at cap
+- `z-ai/glm-5.2:free`, `google/gemma-4-31b-it:free` — HTTP 429
+- `deepseek/deepseek-r1:free`, `qwen/qwen3-coder:free` — HTTP 404, no longer free
+
+0G kept as fallback: it returned empty content and fenced JSON on the deeper
+schemas often enough to cost a run.
+
+### Domain neutrality (user correction, important)
+
+NVDA is only a test fixture. Thousands of users, any market. I introduced a
+semiconductor-flavoured `TRADE_HOSTS` list and had to fix it: trade press is now
+matched structurally by sector and publication words in the domain stem, and
+regulators by suffix pattern (`gov.ng`, `go.jp`, `gouv.fr`, `gob.mx`), so a tender
+board in Lagos is as primary as the SEC. 22 classification cases pass.
+
+Verified on three sectors, not one:
+- semiconductors (stored NVDA evidence): found that the $700B capex headline and
+  the Trainium/Maia wins are the same dollar pool, so the bull number funds the
+  bear case. Two contradictions where `detectContradictions` always returned 0.
+- shipping (MAERSK): found Rotterdam congestion eats the rate gain before it
+  reaches operating profit.
+- Nigerian cement (DANGCEM): found the volume tailwind rests on competitor
+  misfortune, not organic demand, and said a thesis holding only because rivals
+  are weaker is fragile.
+
+### Surfaces
+
+MCP `stockintel_assess` renders the report. `agentThesisChanges` compares one
+priced-in call and confidence band. `agentConflicting` builds the counter-case from
+contradictions, down/mixed chains, bear case, invalidation. `agentEvidence`
+resolves against interpreted entities. All fall back to the legacy shape for old
+runs, which say so plainly rather than passing a thesis off as a report.
+
+Web UI: `ReportView.tsx` renders executive → synthesis → market → scenarios →
+evidence → bottom line. Evidence ids are traceable chips, hop basis is colour-coded
+(observed / inferred / speculative dimmed). SSR-tested for section order and for
+the empty-report fallback (no orphan headers). Examples and facts diversified off
+semiconductors.
+
+### Deploy note
+
+Agents run on AWS at `/opt/stockintel` from a read-only deploy key. Source of truth
+is this repo. To pick up the collector change:
+`cd /opt/stockintel && git pull && sudo systemctl restart 'stockintel-*'`.
+
+### Still open
+
+- `synthesize.ts` still writes the legacy `synthesis_json`. Both objects are written
+  per run so nothing is lost, but the old path is dead weight once the UI has been
+  live on reports for a while.
+- Observation pass before hypothesis still missing: `generateHypotheses` gets only
+  the question string, which is why stored hypotheses read as model recollection.
+- Agents still ignore `whatToVerify`, `investigation`, `memory_brief`,
+  `memory_recheck`. All four are dispatched and read by nobody.
+- `graph_edges` still has no entity-to-entity relations, so a chain cannot be
+  persisted and traversed even though the connection pass now produces one.
+- `deriveFollowUpTasks` is still the hardcoded 3xN loop.
+- 0G fenced-JSON parse failure is on our side, worth a look.
+
 ## 2026-09-06 — Orchestrator verification plus target report architecture
 
 Code-level audit of the intelligence loop, then the user's correction of what it should be.

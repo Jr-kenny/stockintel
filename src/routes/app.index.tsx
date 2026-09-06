@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { SectionHeading, StatusPill } from "@/components/app/AppUI";
 import { RequireAuth } from "@/components/app/auth-gate";
 import { AgentOsConnect } from "@/components/app/agent-os-connect";
+import { ReportView } from "@/components/app/ReportView";
 import { PrivyIdentity, type PrivyIdentityInfo } from "@/components/app/privy-identity";
 import {
   getInquiry,
@@ -55,10 +56,15 @@ type ReadoutEntry = {
   contributingAgents: string[];
 };
 
+/**
+ * Deliberately spread across sectors and regions. All three used to be
+ * semiconductors, which quietly told users the product only works on chips.
+ * Nothing in the pipeline is sector-specific and the examples should say so.
+ */
 const EXAMPLES = [
   "Watch NVDA: what is happening in the world that could materially change its value?",
-  "Hyperscalers are guiding AI capex up. Who is economically exposed besides NVIDIA?",
-  "I hold semiconductor bStocks. Surface fresh events with impact paths into MU, DELL and AVGO.",
+  "Watch MAERSK: which shipping and port events could move it over the next quarter?",
+  "Watch DANGCEM: what capacity, contract or energy events change the Nigerian cement picture?",
 ];
 
 type RunHistoryRow = {
@@ -76,14 +82,16 @@ type RunHistoryRow = {
 const FACTS = [
   "Prices react to events. The move starts before the ticker, in buildouts, filings and capacity guides.",
   "A $10B hyperscale AI buildout fans out: GPUs to NVIDIA, memory to Micron, servers to Dell, networking to Broadcom.",
+  "A closed shipping lane fans out too: longer routings, tighter capacity, higher freight rates, thinner port windows.",
   "One permit plus one contractor statement beats five outlets citing the same press release.",
   "Five citations of one article count as one source. Independence is what earns confidence.",
+  "A regulator speaking for itself outranks any story about it, whether that is the SEC or a tender board in Lagos.",
   "bStocks trade 24/7. Most tokenized-equity volume prints outside US market hours.",
-  "SEC 8-K filings are primary sources. The company files under penalty.",
-  "Impact is perishable: the moment a thesis is priced in, the window closes. Freshness is the product.",
+  "Priced in is measurable: did the tape move beyond its normal daily band on the day the event landed?",
   "Second-order exposure hides alpha. Power, cooling and memory ride every data-center build.",
-  "Every impact path carries its evidence, and what could invalidate it.",
-  "The thesis forms first. The market check comes second. Never the reverse.",
+  "Every claim carries its evidence, and the report states what would prove it wrong.",
+  "A thesis that holds only because rivals are weaker is fragile. The report says so when that is the case.",
+  "The chain forms first. The market check comes second. Never the reverse.",
 ];
 
 function RotatingFacts() {
@@ -436,6 +444,9 @@ function Intelligence() {
   const steps = buildSteps(inquiry);
   const readout = (inquiry?.readout as ReadoutEntry[] | null) ?? [];
   const synthesis = inquiry?.synthesis ?? null;
+  // Null on runs from before the report pass, which is why the thesis branch
+  // below still exists.
+  const report = inquiry?.report ?? null;
 
   return (
     <div>
@@ -710,8 +721,22 @@ function Intelligence() {
                 </div>
               </div>
 
-              {phase === "done" && synthesis && synthesis.recommendations.length > 0 ? (
+              {phase === "done" && report ? (
+                /* The intelligence report is the deliverable. Everything below
+                   this branch is the older per-exposure thesis, kept only for
+                   runs recorded before the report pass existed. */
+                <div className="mt-5">
+                  <ReportView
+                    report={report}
+                    marketSlot={<AgentOsConnect identity={identity} />}
+                  />
+                </div>
+              ) : phase === "done" && synthesis && synthesis.recommendations.length > 0 ? (
                 <div className="mt-5 space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                  <p className="font-mono text-xs text-muted-foreground">
+                    This run predates the intelligence report, so what follows is the older
+                    per-exposure thesis.
+                  </p>
                   {synthesis.preamble && (
                     <p className="max-w-3xl border-l-2 border-signal pl-4 text-sm leading-relaxed text-muted-foreground">
                       {synthesis.preamble}
