@@ -9,10 +9,11 @@
  */
 
 import { z } from "zod";
-import { db, ensureSchema } from "@/lib/db";
+import { db, ensureSchema, newId, nowIso } from "@/lib/db";
 import { claims, inquiries } from "@/lib/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, notInArray } from "drizzle-orm";
 import { companyTickers, extractTicker } from "@/lib/binance/market";
+import { runInquiry, tryGradeIfReady, SOURCING_WINDOW_SECONDS } from "./run";
 
 const sourceSchema = z.object({ label: z.string(), url: z.string() });
 
@@ -196,6 +197,125 @@ export async function agentClusters(ticker: string): Promise<ClusterResult> {
       contributingAgents: e.contributingAgents,
     })),
   };
+}
+
+const marketSchema = z
+  .object({
+    at: z.string(),
+    lines: z.array(z.string()),
+  })
+  .passthrough()
+  .nullable()
+  .optional();
+
+export type InvestigationStatus = {
+  inquiryId: string;
+  status: "dispatching" | "collecting" | "grading" | "complete" | "failed";
+  windowSeconds: number;
+  windowClosesAt: string | null;
+  progress: { agentsMatched: number; claimsReceived: number; sourcesClustered: number };
+  result: {
+    question: string;
+    preamble: string;
+    recommendations: Synthesis["recommendations"];
+    marketLines: string[];
+  } | null;
+  error: string | null;
+};
+
+function resultFromRow(row: typeof inquiries.$inferSelect): InvestigationStatus["result"] {
+  if (!row.synthesisJson) return null;
+  try {
+    const synthesis = synthesisSchema.parse(JSON.parse(row.synthesisJson));
+    let marketLines: string[] = [];
+    try {
+      const market = row.marketJson ? marketSchema.parse(JSON.parse(row.marketJson)) : null;
+      marketLines = market?.lines ?? [];
+    } catch {
+      marketLines = [];
+    }
+    return {
+      question: row.question,
+      preamble: synthesis.preamble,
+      recommendations: synthesis.recommendations,
+      marketLines,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Poll one investigation. Mirrors the app poll: triggers grading when due. */
+export async function agentInquiryStatus(inquiryId: string): Promise<InvestigationStatus | null> {
+  await ensureSchema();
+  let [row] = await db.select().from(inquiries).where(eq(inquiries.id, inquiryId));
+  if (!row) return null;
+  if (row.status === "collecting" && row.windowClosesAt) {
+    try {
+      const graded = await tryGradeIfReady(inquiryId);
+      if (graded) {
+        const [fresh] = await db.select().from(inquiries).where(eq(inquiries.id, inquiryId));
+        if (fresh) row = fresh;
+      }
+    } catch (err) {
+      console.error("agent poll grading trigger failed:", err);
+    }
+  }
+  return {
+    inquiryId: row.id,
+    status: row.status as InvestigationStatus["status"],
+    windowSeconds: SOURCING_WINDOW_SECONDS,
+    windowClosesAt: row.windowClosesAt,
+    progress: {
+      agentsMatched: row.agentsMatched ?? 0,
+      claimsReceived: row.claimsReceived ?? 0,
+      sourcesClustered: row.sourcesClustered ?? 0,
+    },
+    result: row.status === "complete" ? resultFromRow(row) : null,
+    error: row.error,
+  };
+}
+
+const MAX_CONCURRENT_EXTERNAL = 2;
+const EXTERNAL_WINDOW_MS = 20 * 60_000;
+
+export type InvestigationStart =
+  | { ok: true; inquiryId: string; windowSeconds: number }
+  | { ok: false; error: string };
+
+/**
+ * Start a live grid investigation for an outside agent: the same dispatch
+ * the app runs, guest-metered like app guest runs. Two concurrent external
+ * runs max; beyond that the grid answers busy instead of degrading.
+ */
+export async function agentInvestigate(question: string): Promise<InvestigationStart> {
+  await ensureSchema();
+  const since = new Date(Date.now() - EXTERNAL_WINDOW_MS).toISOString();
+  const active = await db
+    .select({ id: inquiries.id })
+    .from(inquiries)
+    .where(
+      and(
+        isNull(inquiries.identity),
+        gt(inquiries.createdAt, since),
+        notInArray(inquiries.status, ["complete", "failed"]),
+      ),
+    );
+  if (active.length >= MAX_CONCURRENT_EXTERNAL) {
+    return { ok: false, error: "Grid busy. Poll an existing run or retry shortly." };
+  }
+  const id = newId("INQ");
+  const ts = nowIso();
+  await db.insert(inquiries).values({
+    id,
+    question: question.slice(0, 500),
+    status: "dispatching",
+    createdAt: ts,
+    updatedAt: ts,
+  });
+  const submitUrl = process.env["PUBLIC_SUBMIT_URL"] ?? "http://localhost:8080";
+  await runInquiry(id, `${submitUrl}/api/claims/submit`);
+  return { ok: true, inquiryId: id, windowSeconds: SOURCING_WINDOW_SECONDS };
 }
 
 export type HistoryResult = {

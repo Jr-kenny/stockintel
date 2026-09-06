@@ -295,6 +295,78 @@ export function buildStockintelMcpServer(): McpServer {
     },
   );
 
+  server.registerTool(
+    "stockintel_investigate",
+    {
+      title: "Live investigation",
+      description:
+        "Run the full StockIntel grid on a question: ten specialists investigate in parallel, " +
+        "evidence clusters, and a thesis synthesizes with priced-or-not verdicts. Takes minutes. " +
+        "Returns an inquiry id immediately; poll stockintel_inquiry until complete. At most two " +
+        "outside runs at once; beyond that the grid answers busy. Read-only market data, no key needed.",
+      inputSchema: {
+        question: z
+          .string()
+          .min(8)
+          .max(500)
+          .describe("Plain-language watch, e.g. Watch NVDA: what could materially change its value?"),
+      },
+    },
+    async ({ question }) => {
+      const { agentInvestigate } = await import("@/lib/orchestrator/agent-read");
+      const started = await agentInvestigate(question);
+      const payload = started;
+      const text = started.ok
+        ? `Investigation ${started.inquiryId} dispatched. Poll stockintel_inquiry every 30 seconds; sourcing runs about ${started.windowSeconds} seconds before grading.`
+        : `Grid busy: ${started.error}`;
+      return {
+        content: [{ type: "text" as const, text }],
+        structuredContent: payload,
+      };
+    },
+  );
+
+  server.registerTool(
+    "stockintel_inquiry",
+    {
+      title: "Investigation status",
+      description:
+        "Poll a live investigation by inquiry id: status, progress counts, and the full thesis " +
+        "once complete. Triggers grading when the sourcing window closes.",
+      inputSchema: {
+        inquiry_id: z.string().min(3).describe("Inquiry id from stockintel_investigate."),
+      },
+    },
+    async ({ inquiry_id }) => {
+      const { agentInquiryStatus } = await import("@/lib/orchestrator/agent-read");
+      const s = await agentInquiryStatus(inquiry_id);
+      if (!s) {
+        const payload = { found: false, inquiryId: inquiry_id };
+        return {
+          content: [{ type: "text" as const, text: `Unknown inquiry ${inquiry_id}.` }],
+          structuredContent: payload,
+        };
+      }
+      const text =
+        s.status === "complete" && s.result
+          ? [
+              s.result.preamble,
+              ...s.result.recommendations.map(
+                (r) => `${r.company} (${r.verdict}, ${r.confidence}%): ${r.marketCall} [${r.timeframe}]`,
+              ),
+            ]
+              .filter(Boolean)
+              .join("\n")
+          : s.status === "failed"
+            ? `Investigation failed: ${s.error ?? "unknown error"}.`
+            : `${s.status}: ${s.progress.claimsReceived} claims from ${s.progress.agentsMatched} agents. Poll again shortly.`;
+      return {
+        content: [{ type: "text" as const, text }],
+        structuredContent: s,
+      };
+    },
+  );
+
   return server;
 }
 

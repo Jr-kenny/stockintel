@@ -102,6 +102,12 @@ export async function handleConnectorApi(request: Request): Promise<Response> {
   if (request.method === "POST" && url.pathname === "/api/market/evidence") {
     return marketEvidenceRoute(request);
   }
+  if (request.method === "POST" && url.pathname === "/api/market/investigate") {
+    return marketInvestigateRoute(request);
+  }
+  if (request.method === "POST" && url.pathname === "/api/market/inquiry") {
+    return marketInquiryRoute(request);
+  }
   return json({ error: "Not found" }, 404);
 }
 
@@ -206,6 +212,41 @@ async function marketEvidenceRoute(request: Request): Promise<Response> {
   }
   const { agentEvidence } = await import("@/lib/orchestrator/agent-read");
   return json(await agentEvidence(parsed.data.ticker, parsed.data.company));
+}
+
+/** Start a live grid investigation for an outside agent. */
+async function marketInvestigateRoute(request: Request): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Invalid JSON" }, 400);
+  }
+  const parsed = z.object({ question: z.string().min(8).max(500) }).safeParse(body);
+  if (!parsed.success) {
+    return json({ error: "Validation failed", issues: parsed.error.issues }, 400);
+  }
+  const { agentInvestigate } = await import("@/lib/orchestrator/agent-read");
+  const started = await agentInvestigate(parsed.data.question);
+  return json(started, started.ok ? 200 : 429);
+}
+
+/** Poll a live investigation by inquiry id. */
+async function marketInquiryRoute(request: Request): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Invalid JSON" }, 400);
+  }
+  const parsed = z.object({ inquiry_id: z.string().min(3) }).safeParse(body);
+  if (!parsed.success) {
+    return json({ error: "Validation failed", issues: parsed.error.issues }, 400);
+  }
+  const { agentInquiryStatus } = await import("@/lib/orchestrator/agent-read");
+  const status = await agentInquiryStatus(parsed.data.inquiry_id);
+  if (!status) return json({ error: "Unknown inquiry." }, 404);
+  return json(status);
 }
 async function marketReadRoute(request: Request): Promise<Response> {
   let body: unknown;
