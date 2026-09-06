@@ -23,6 +23,8 @@ claude mcp add binance-mcp-server --transport http https://agent.binance.com/mcp
 claude mcp add stockintel --transport http https://stockintelislive.vercel.app/mcp
 ```
 
+Codex: `codex mcp add stockintel --url https://stockintelislive.vercel.app/mcp` (no auth flag, our server needs no key). ChatGPT web: Settings, Security, Developer Mode, Plugins, +, name it StockIntel, plugin URL `https://stockintelislive.vercel.app/mcp`, Create. Check it: ask your chat to read NVDA through the StockIntel tools and confirm the tool ran.
+
 Then call `stockintel_read`, `stockintel_assess`, `stockintel_clusters`, `stockintel_thesis_changes`, `stockintel_conflicting`, `stockintel_evidence`, `stockintel_investigate`, `stockintel_inquiry`, `stockintel_status`. Ask for the thesis with `stockintel_assess`, for grouped evidence without verdicts with `stockintel_clusters`, for what changed with `stockintel_thesis_changes`, for the counter-case with `stockintel_conflicting`, and drill into one thread with `stockintel_evidence`. For a fresh live investigation, `stockintel_investigate` starts the full ten-specialist grid and returns an inquiry id; poll `stockintel_inquiry` every 30 seconds until complete.
 
 **When both servers are connected, fetch the market leg first.** Call your Binance market-data tools for the tickers, then pass those results verbatim into `stockintel_read` as `binance_market_data`. StockIntel reads price and 24h change out of them and marks that leg caller-supplied. Omit it and StockIntel resolves the same public numbers itself through Agent OS or the mirror.

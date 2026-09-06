@@ -21,6 +21,11 @@ const clients = [
     code: true,
   },
   {
+    name: "Codex",
+    body: "codex mcp add stockintel --url https://stockintelislive.vercel.app/mcp",
+    code: true,
+  },
+  {
     name: "VS Code",
     body: "Open this repo. Both servers start from .vscode/mcp.json, then MCP List Servers, authenticate the Binance one.",
     code: false,
@@ -31,8 +36,8 @@ const clients = [
     code: false,
   },
   {
-    name: "ChatGPT and Codex",
-    body: "Add the same URL as a connector in settings, then authenticate.",
+    name: "ChatGPT on web",
+    body: "Settings, Security, turn on Developer Mode and log in. Open Plugins, press +, name it StockIntel, paste https://stockintelislive.vercel.app/mcp as the plugin URL, Create.",
     code: false,
   },
 ];
@@ -95,6 +100,19 @@ function ConnectAgent() {
           your own Binance numbers ride along as caller-supplied context. The full contract
           lives in skills/stockintel/SKILL.md in the repo.
         </p>
+
+        <section className="mt-12 rounded-md border border-border bg-card p-6 sm:p-8" aria-labelledby="check-connection">
+          <p className="label-mono text-signal">Check the connection works</p>
+          <h2 id="check-connection" className="mt-3 font-display text-2xl">
+            One prompt proves it
+          </h2>
+          <p className="mt-3 max-w-2xl text-base leading-relaxed text-muted-foreground">
+            In your agent chat, enter: use the StockIntel MCP server to read NVDA. Confirm
+            the response shows the StockIntel tool being used and returns a live read. For
+            the combined proof, ask it to fetch the BTC ticker from your Binance tools first
+            and pass that output into the StockIntel read.
+          </p>
+        </section>
       </section>
     </div>
   );
