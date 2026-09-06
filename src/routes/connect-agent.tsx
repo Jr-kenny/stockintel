@@ -43,14 +43,14 @@ const clients = [
 ];
 
 const tools: [string, string][] = [
-  ["stockintel_read", "Live prices, 24h move, and the positioning gauge for up to 20 tickers."],
-  ["stockintel_assess", "The full thesis for a ticker, priced or not, with market calls."],
+  ["stockintel_investigate", "Starts the full ten-specialist grid on your question, returns an inquiry id."],
+  ["stockintel_inquiry", "Polls that investigation to the finished thesis."],
+  ["stockintel_assess", "The latest stored thesis for a ticker, priced or not, with market calls."],
   ["stockintel_clusters", "Grouped evidence per exposure, no verdicts."],
   ["stockintel_thesis_changes", "What moved between the last two assessments, plus history."],
   ["stockintel_conflicting", "What argues against the latest thesis, from stored data only."],
   ["stockintel_evidence", "Drill one thread down to sources, cluster, and top claims."],
-  ["stockintel_investigate", "Starts the full ten-specialist grid, returns an inquiry id."],
-  ["stockintel_inquiry", "Polls that investigation to the finished thesis."],
+  ["stockintel_read", "Live prices, 24h move, and the positioning gauge for up to 20 tickers."],
   ["stockintel_status", "Whether this deployment holds its own Agent OS session."],
 ];
 
@@ -117,6 +117,27 @@ claude mcp add stockintel --transport http https://stockintelislive.vercel.app/m
               )}
             </div>
           ))}
+        </div>
+
+        <h2 className="mt-14 font-display text-2xl">What a thesis looks like</h2>
+        <p className="mt-3 max-w-2xl text-base leading-relaxed text-muted-foreground">
+          The grid observes and hypothesizes. The orchestrator connects the dots into one
+          assessment per exposure. Example shape below, illustrative, not a live call.
+        </p>
+        <div className="mt-6 rounded-md border border-border bg-card p-6">
+          <p className="label-mono text-signal">01 · Assessment · Not yet priced</p>
+          <p className="mt-2 font-mono text-sm text-ink">
+            Hyperscale buildout → GPU demand → NVIDIA → TSMC capacity
+          </p>
+          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            A $10B data-center expansion fans out through GPUs, memory, servers, and power.
+            The chain reaches NVIDIA through confirmed procurement, and the observed price
+            move does not yet reflect it. Breaks if the buildout slips a quarter or the
+            order goes elsewhere.
+          </p>
+          <p className="mt-3 font-mono text-xs text-muted-foreground">
+            Market call · timeframe 1 to 4 weeks · confidence 82%
+          </p>
         </div>
 
         <h2 className="mt-14 font-display text-2xl">What each call does</h2>

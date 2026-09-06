@@ -151,6 +151,7 @@ export function buildStockintelMcpServer(): McpServer {
       const a = await agentAssess(ticker);
       const text = a.found
         ? [
+            ...(a.note ? [a.note] : []),
             a.preamble,
             ...a.recommendations.map(
               (r) => `${r.company} (${r.verdict}, ${r.confidence}%): ${r.marketCall} [${r.timeframe}]`,
@@ -159,7 +160,7 @@ export function buildStockintelMcpServer(): McpServer {
           ]
             .filter(Boolean)
             .join("\n")
-        : `No completed assessment for ${a.ticker} yet. Run a watch in the app first.`;
+        : `No completed assessment for ${a.ticker} yet. Run a live investigation first.`;
       return {
         content: [{ type: "text" as const, text }],
         structuredContent: a,
@@ -189,7 +190,7 @@ export function buildStockintelMcpServer(): McpServer {
                 `${e.company} [${e.confidence}%]: ${e.topClaim} (${e.independentSources} independent sources)`,
             )
             .join("\n")
-        : `No completed clusters for ${c.ticker} yet. Run a watch in the app first.`;
+        : `No completed clusters for ${c.ticker} yet. Run a live investigation first.`;
       return {
         content: [{ type: "text" as const, text }],
         structuredContent: c,

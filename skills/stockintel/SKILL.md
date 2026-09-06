@@ -25,7 +25,7 @@ claude mcp add stockintel --transport http https://stockintelislive.vercel.app/m
 
 Codex: `codex mcp add stockintel --url https://stockintelislive.vercel.app/mcp` (no auth flag, our server needs no key). ChatGPT web: Settings, Security, Developer Mode, Plugins, +, name it StockIntel, plugin URL `https://stockintelislive.vercel.app/mcp`, Create. Check it: ask your chat to read NVDA through the StockIntel tools and confirm the tool ran.
 
-Then call `stockintel_read`, `stockintel_assess`, `stockintel_clusters`, `stockintel_thesis_changes`, `stockintel_conflicting`, `stockintel_evidence`, `stockintel_investigate`, `stockintel_inquiry`, `stockintel_status`. Ask for the thesis with `stockintel_assess`, for grouped evidence without verdicts with `stockintel_clusters`, for what changed with `stockintel_thesis_changes`, for the counter-case with `stockintel_conflicting`, and drill into one thread with `stockintel_evidence`. For a fresh live investigation, `stockintel_investigate` starts the full ten-specialist grid and returns an inquiry id; poll `stockintel_inquiry` every 30 seconds until complete.
+Then call `stockintel_investigate` first for a live thesis: the full ten-specialist grid investigates and the orchestrator connects event to exposure to verdict. Poll `stockintel_inquiry` until complete. For previous thinking, `stockintel_assess` serves the latest thesis, `stockintel_clusters` the grouped evidence, `stockintel_thesis_changes` what moved, `stockintel_conflicting` the counter-case, `stockintel_evidence` one thread drilled down. Stored reads admit their age past a day. `stockintel_read` covers market context, `stockintel_status` the deployment state.
 
 **When both servers are connected, fetch the market leg first.** Call your Binance market-data tools for the tickers, then pass those results verbatim into `stockintel_read` as `binance_market_data`. StockIntel reads price and 24h change out of them and marks that leg caller-supplied. Omit it and StockIntel resolves the same public numbers itself through Agent OS or the mirror.
 
@@ -35,15 +35,14 @@ Then call `stockintel_read`, `stockintel_assess`, `stockintel_clusters`, `stocki
 
 | Caller intent | Request |
 |---|---|
+| Live investigation and thesis | `POST /api/market/investigate` `{"question":"Watch NVDA: what could move it?"}` then `POST /api/market/inquiry` `{"inquiry_id":"INQ-..."}` |
 | Market read on tickers | `POST /api/market/read` `{"tickers":["NVDA","MU"]}` |
 | Read with your own exchange leg | `POST /api/market/read` `{"tickers":["BTC"],"binance_market_data":{...}}` |
-| Full thesis for a ticker | `POST /api/market/assess` `{"ticker":"NVDA"}` |
+| Previous thesis for a ticker | `POST /api/market/assess` `{"ticker":"NVDA"}` |
 | Evidence clusters without verdicts | `POST /api/market/clusters` `{"ticker":"NVDA"}` |
 | What changed between assessments | `POST /api/market/changes` `{"ticker":"NVDA"}` |
 | What argues against the thesis | `POST /api/market/conflicting` `{"ticker":"NVDA"}` |
 | Drill into one thread | `POST /api/market/evidence` `{"ticker":"NVDA","company":"NVIDIA"}` |
-| Start a live investigation | `POST /api/market/investigate` `{"question":"Watch NVDA: what could move it?"}` |
-| Poll the investigation | `POST /api/market/inquiry` `{"inquiry_id":"INQ-..."}` |
 | Is StockIntel live on Agent OS | `GET /api/binance/status` |
 
 ```bash

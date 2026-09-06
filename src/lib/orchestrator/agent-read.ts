@@ -62,6 +62,22 @@ function normTicker(raw: string): string {
   return raw.toUpperCase().replace(/[^A-Z]/g, "");
 }
 
+/** A stored assessment older than this admits it is memory, not news. */
+const STALE_AFTER_MS = 24 * 3600 * 1000;
+
+function staleness(assessedAt: string): { stale: boolean; note: string } {
+  const age = Date.now() - Date.parse(assessedAt);
+  if (Number.isFinite(age) && age > STALE_AFTER_MS) {
+    const days = Math.floor(age / (24 * 3600 * 1000));
+    const ageText = days >= 1 ? `${days} day${days > 1 ? "s" : ""} old` : "over a day old";
+    return {
+      stale: true,
+      note: `This thinking is ${ageText}. Treat it as memory for comparison, not fresh intelligence. Run a live investigation for a current thesis.`,
+    };
+  }
+  return { stale: false, note: "" };
+}
+
 /** Latest completed run whose question names the ticker. */
 async function findRun(ticker: string): Promise<MatchedRun | null> {
   const runs = await listRuns(ticker);
@@ -125,6 +141,8 @@ export type AssessResult = {
   inquiryId: string | null;
   question: string | null;
   assessedAt: string | null;
+  stale: boolean;
+  note: string;
   preamble: string;
   recommendations: Synthesis["recommendations"];
 };
@@ -139,16 +157,21 @@ export async function agentAssess(ticker: string): Promise<AssessResult> {
       inquiryId: null,
       question: null,
       assessedAt: null,
+      stale: false,
+      note: "",
       preamble: "",
       recommendations: [],
     };
   }
+  const { stale, note } = staleness(run.assessedAt);
   return {
     found: true,
     ticker: normTicker(ticker),
     inquiryId: run.inquiryId,
     question: run.question,
     assessedAt: run.assessedAt,
+    stale,
+    note,
     preamble: run.synthesis.preamble,
     recommendations: run.synthesis.recommendations,
   };
