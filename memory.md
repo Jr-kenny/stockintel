@@ -85,8 +85,10 @@ semiconductors.
 ### Deploy note
 
 Agents run on AWS at `/opt/stockintel` from a read-only deploy key. Source of truth
-is this repo. To pick up the collector change:
-`cd /opt/stockintel && git pull && sudo systemctl restart 'stockintel-*'`.
+is this repo. Deploy via SSM (`aws ssm send-command --instance-ids
+i-0018b77942c4452bc`): pull, then restart the ten `stockintel-<agent>`
+services by name. Unit names are agent names, not ports. Grid restarted on
+`02176f2` 2026-09-06, all ten healthy with fresh registrations.
 
 ### Still open
 
