@@ -94,6 +94,15 @@ is this repo. To pick up the collector change:
   `synthesizeInquiry`, `synthesize.ts` deleted, the reflect script carries its
   own legacy type. New runs write report plus readout only. Old `synthesis_json`
   rows still read as fallback in the UI and MCP layer, schema column untouched.
+- 0G fenced-JSON fixed 2026-09-06: `chatJson` normalizes once and returns clean
+  JSON the way OpenRouter already does, instead of raw fenced content that died
+  in caller-side slices.
+- Agent intake fixed 2026-09-06: all ten agents read `whatToVerify`,
+  `investigation`, `memory_brief`, `memory_recheck`. Verify lists, open
+  questions, entities, and brief words feed the relevance gate, assigned
+  rechecks become beat-aimed queries capped at two. Canonical body lives in
+  `web-research`, `sync-agent-body.ts` propagated to eight, `media-youtube`
+  fixed separately.
 - Two-wave dispatch is live, observation gap closed by construction: wave one is a
   short open sweep, hypotheses form from wave-one returns plus tape plus memory,
   wave two is the aimed hunt. `observe.ts` stays as the cold-start fallback when

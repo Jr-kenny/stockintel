@@ -129,10 +129,19 @@ type ResearchCommand = {
   inquiry_id: string;
   question: string;
   scope: { category?: string; geography?: string };
-  hypotheses?: { label: string; searchHints: string[]; signals: string[] }[];
+  hypotheses?: { label: string; searchHints: string[]; signals: string[]; whatToVerify?: string[] }[];
   investigation?: unknown;
   window_seconds: number;
   submit_url: string;
+  /** Orchestrator memory: broadcast brief plus rechecks assigned to this agent. */
+  memory_brief?: string;
+  memory_recheck?: {
+    followup_id: number;
+    company: string;
+    agent_id: string;
+    note: string;
+    prior_claim: string | null;
+  }[];
 };
 
 // ─── Query building ─────────────────────────────────────────────────────────
@@ -157,39 +166,102 @@ function aim(query: string, angleIndex: number): string {
   return parts.join(" ").trim();
 }
 
+function wordsOf(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 3 && !STOPWORDS.has(w) && !/^\d+$/.test(w));
+}
+
+/**
+ * Vocabulary from everything the orchestrator sends beyond the question:
+ * hypothesis verify lists, the shared investigation (open questions and
+ * known entities), and the memory brief. The relevance gate only knows the
+ * words it is given, so without this a briefed name reads as noise and the
+ * orchestrator briefs nobody.
+ */
+function extraVocabulary(cmd: ResearchCommand): string[] {
+  const out: string[] = [];
+  for (const h of cmd.hypotheses ?? []) {
+    out.push(...wordsOf((h.whatToVerify ?? []).join(" ")));
+  }
+  const inv = cmd.investigation as null | {
+    openQuestions?: unknown;
+    entities?: unknown;
+  };
+  if (inv && typeof inv === "object") {
+    if (Array.isArray(inv.openQuestions)) {
+      for (const q of inv.openQuestions) {
+        if (typeof q === "string") out.push(...wordsOf(q));
+      }
+    }
+    if (Array.isArray(inv.entities)) {
+      for (const e of inv.entities) {
+        const name = (e as { name?: unknown }).name;
+        if (typeof name === "string") out.push(...wordsOf(name));
+      }
+    }
+  }
+  if (cmd.memory_brief) out.push(...wordsOf(cmd.memory_brief));
+  return Array.from(new Set(out)).slice(0, 40);
+}
+
+/** Targeted re-checks assigned to this agent become beat-aimed queries. */
+function recheckQueries(cmd: ResearchCommand): string[] {
+  const out: string[] = [];
+  for (const r of (cmd.memory_recheck ?? []).slice(0, 2)) {
+    const about = wordsOf(r.prior_claim ?? r.note).slice(0, 4).join(" ");
+    const q = `${r.company} ${about}`.trim();
+    if (q) out.push(q);
+  }
+  return out;
+}
+
 function buildQueries(cmd: ResearchCommand): string[] {
+  const out: string[] = [];
   // Hypotheses-aware: use the orchestrator's search hints first — they already encode
   // exposure-chain reasoning (events, counterparties, filings), not just keywords.
   if (cmd.hypotheses?.length) {
     const hints = cmd.hypotheses.flatMap((h) => h.searchHints ?? []).filter(Boolean).slice(0, 6);
     if (hints.length >= 2) {
       const geo = cmd.scope.geography ? ` ${cmd.scope.geography}` : "";
-      return hints.map((q, i) => aim(`${q}${geo}`.trim(), i));
+      out.push(...hints.map((q, i) => aim(`${q}${geo}`.trim(), i)));
     }
   }
-  const geo = cmd.scope.geography ?? "";
-  const words = cmd.question
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/)
-    .filter((w) => w.length > 2 && !STOPWORDS.has(w) && !/^\d+$/.test(w));
+  if (out.length === 0) {
+    const geo = cmd.scope.geography ?? "";
+    const words = cmd.question
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 2 && !STOPWORDS.has(w) && !/^\d+$/.test(w));
 
-  // Drop the geography word from the topic list so it isn't doubled up.
-  const geoLower = geo.toLowerCase();
-  const topicWords = words.filter((w) => w !== geoLower);
-  const topic = Array.from(new Set(topicWords)).slice(0, 5).join(" ");
+    // Drop the geography word from the topic list so it isn't doubled up.
+    const geoLower = geo.toLowerCase();
+    const topicWords = words.filter((w) => w !== geoLower);
+    const topic = Array.from(new Set(topicWords)).slice(0, 5).join(" ");
 
-  const queries: string[] = [];
-  if (topic && geo) queries.push(`${topic} ${geo}`);
-  if (topic && !geo) queries.push(topic);
-  if (queries.length === 0 && geo) queries.push(geo);
-  // One query per angle so a multi-angle beat still covers its own ground when
-  // the orchestrator sent no hints.
-  const spread = BEAT.angles.length > 0 ? BEAT.angles.length : 1;
-  const aimed = queries.flatMap((q) =>
-    Array.from({ length: spread }, (_, i) => aim(q, i)),
-  );
-  return Array.from(new Set(aimed)).slice(0, Math.max(2, spread));
+    const queries: string[] = [];
+    if (topic && geo) queries.push(`${topic} ${geo}`);
+    if (topic && !geo) queries.push(topic);
+    if (queries.length === 0 && geo) queries.push(geo);
+    // One query per angle so a multi-angle beat still covers its own ground when
+    // the orchestrator sent no hints.
+    const spread = BEAT.angles.length > 0 ? BEAT.angles.length : 1;
+    const aimed = queries.flatMap((q) =>
+      Array.from({ length: spread }, (_, i) => aim(q, i)),
+    );
+    out.push(...Array.from(new Set(aimed)).slice(0, Math.max(2, spread)));
+  }
+  // Assigned re-checks ride along as extra beat-aimed queries, capped so the
+  // slow sources cannot blow the collection window.
+  const rechecks = recheckQueries(cmd);
+  rechecks.forEach((q, i) => {
+    const aimed = aim(q, out.length + i);
+    if (!out.includes(aimed)) out.push(aimed);
+  });
+  return Array.from(new Set(out)).slice(0, 8);
 }
 
 // ─── Sources ────────────────────────────────────────────────────────────────
@@ -447,13 +519,17 @@ function mergeKey(name: string): string {
 }
 
 function toClaims(signals: RawSignal[], cmd: ResearchCommand): Claim[] {
-  // Topic vocabulary from the actual question — used for relevance gating.
+  // Topic vocabulary from the actual question plus everything briefed —
+  // used for relevance gating.
   const geo = cmd.scope.geography ?? "";
-  const topicWords = cmd.question
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/)
-    .filter((w) => w.length > 3 && !STOPWORDS.has(w) && w !== geo.toLowerCase());
+  const topicWords = [
+    ...cmd.question
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 3 && !STOPWORDS.has(w) && w !== geo.toLowerCase()),
+    ...extraVocabulary(cmd),
+  ];
 
   // Pass 1 — collect qualifying signals per merged company.
   interface Bucket {
@@ -622,6 +698,10 @@ async function researchAndSubmit(command: ResearchCommand) {
   try {
     const queries = buildQueries(command);
     console.log(`→ CMD ${command.command_id} · queries:`, queries);
+    console.log(
+      `  intake: ${command.memory_brief ? "brief+" : ""}${command.memory_recheck?.length ?? 0} recheck(s), ` +
+        `${command.hypotheses?.flatMap((h) => h.whatToVerify ?? []).length ?? 0} verify item(s)`,
+    );
 
     const signals: RawSignal[] = [];
     for (const q of queries) {

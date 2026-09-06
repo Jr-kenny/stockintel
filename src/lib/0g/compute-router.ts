@@ -171,8 +171,20 @@ export async function chatJson(opts: ChatJsonOptions): Promise<ChatJsonResult> {
       const content = payload.choices?.[0]?.message?.content ?? "";
       if (!content.trim()) throw new Error("router returned empty content");
 
+      // Normalize once here so every caller gets clean JSON: strip fences
+      // and slice the object the way OpenRouter already does. Callers parse
+      // with their own slices and salvage paths, which is where fenced
+      // output used to die on our side rather than the model's.
+      const stripped = content
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/\s*```\s*$/i, "")
+        .trim();
+      const start = stripped.indexOf("{");
+      const end = stripped.lastIndexOf("}");
+      const clean = start >= 0 && end > start ? stripped.slice(start, end + 1) : stripped;
+
       try {
-        parseJsonLoose(content); // validate early — callers rely on JSON coming back
+        parseJsonLoose(clean); // validate early — callers rely on JSON coming back
       } catch {
         // Attach the raw text so callers can salvage complete fragments.
         const err = new Error(`router returned non-JSON content: ${content.slice(0, 200)}`);
@@ -182,7 +194,7 @@ export async function chatJson(opts: ChatJsonOptions): Promise<ChatJsonResult> {
 
       const trace = payload.x_0g_trace as { request_id?: string } | undefined;
       return {
-        content,
+        content: clean,
         ...(trace?.request_id ? { requestId: trace.request_id } : {}),
         ...(costFromTrace(payload.x_0g_trace) !== undefined
           ? { costOg: costFromTrace(payload.x_0g_trace) }

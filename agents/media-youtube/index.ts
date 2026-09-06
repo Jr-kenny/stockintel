@@ -42,10 +42,19 @@ type ResearchCommand = {
   inquiry_id: string;
   question: string;
   scope: { category?: string; geography?: string };
-  hypotheses?: { label: string; searchHints: string[]; signals: string[] }[];
+  hypotheses?: { label: string; searchHints: string[]; signals: string[]; whatToVerify?: string[] }[];
   investigation?: unknown;
   window_seconds: number;
   submit_url: string;
+  /** Orchestrator memory: broadcast brief plus rechecks assigned to this agent. */
+  memory_brief?: string;
+  memory_recheck?: {
+    followup_id: number;
+    company: string;
+    agent_id: string;
+    note: string;
+    prior_claim: string | null;
+  }[];
 };
 
 let agentId: string | null = null;
@@ -53,17 +62,28 @@ let agentId: string | null = null;
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function buildQueries(cmd: ResearchCommand): string[] {
+  const out: string[] = [];
   if (cmd.hypotheses?.length) {
     const hints = cmd.hypotheses.flatMap((h) => h.searchHints ?? []).filter(Boolean).slice(0, 4);
     if (hints.length) {
       const geo = cmd.scope.geography ? ` ${cmd.scope.geography}` : "";
       // Bias toward video-rich queries
-      return hints.map((q) => `${q} tour construction project${geo}`.trim());
+      out.push(...hints.map((q) => `${q} tour construction project${geo}`.trim()));
     }
   }
-  const base = cmd.scope.category ?? cmd.question.slice(0, 60);
-  const geo = cmd.scope.geography ? ` ${cmd.scope.geography}` : "";
-  return [`${base} construction tour${geo}`, `${base} project announcement${geo}`].slice(0, 2);
+  if (out.length === 0) {
+    const base = cmd.scope.category ?? cmd.question.slice(0, 60);
+    const geo = cmd.scope.geography ? ` ${cmd.scope.geography}` : "";
+    out.push(`${base} construction tour${geo}`, `${base} project announcement${geo}`);
+  }
+  // Assigned re-checks ride along as video-biased queries. The broadcast
+  // brief names the same companies the rechecks carry, so honoring rechecks
+  // honors the brief.
+  for (const r of (cmd.memory_recheck ?? []).slice(0, 2)) {
+    const q = `${r.company} project interview`.trim();
+    if (!out.includes(q)) out.push(q);
+  }
+  return out.slice(0, 5);
 }
 
 async function discoverVideos(query: string): Promise<{ videoId: string; title: string; channel: string; publishedAt: string; description: string }[]> {
@@ -135,6 +155,11 @@ async function researchAndSubmit(cmd: ResearchCommand): Promise<void> {
     return;
   }
   const queries = buildQueries(cmd);
+  console.log(
+    `→ CMD ${cmd.command_id} · queries:`,
+    queries,
+    `· intake: ${cmd.memory_brief ? "brief+" : ""}${cmd.memory_recheck?.length ?? 0} recheck(s)`,
+  );
   const allVideos: Awaited<ReturnType<typeof discoverVideos>> = [];
   for (const q of queries) {
     try {
