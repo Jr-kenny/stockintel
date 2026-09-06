@@ -1,4 +1,4 @@
-import { chatJson, computeRouterConfig } from "@/lib/0g/compute-router";
+import { jsonProviders } from "@/lib/llm/providers";
 import { guidedSystem } from "./soul";
 
 /**
@@ -129,8 +129,8 @@ export async function llmGradeClaims(
   question: string,
   claims: ClaimForLlmGrade[],
 ): Promise<LlmGradeOutcome> {
-  const config = computeRouterConfig();
-  if (!config.live || claims.length === 0) {
+  const providers = jsonProviders();
+  if (providers.length === 0 || claims.length === 0) {
     return {
       mode: "deterministic",
       model: undefined,
@@ -143,36 +143,47 @@ export async function llmGradeClaims(
   const verdicts: (ClaimVerdict | undefined)[] = [];
   let costOg: number | undefined;
   let failures = 0;
+  let usedModel: string | undefined;
   const chunks = Math.min(MAX_CHUNKS, Math.ceil(claims.length / CHUNK_SIZE));
+  const system = await guidedSystem(SYSTEM_PROMPT);
 
   for (let chunk = 0; chunk < chunks; chunk++) {
     const offset = chunk * CHUNK_SIZE;
     const slice = claims.slice(offset, offset + CHUNK_SIZE);
-    try {
-      const result = await chatJson({
-        system: await guidedSystem(SYSTEM_PROMPT),
-        user: buildUserPrompt(question, slice, offset),
-        maxTokens: 2000,
-        temperature: 0,
-      });
-      verdicts.push(...parseVerdicts(result.content, slice.length, offset));
-      if (result.costOg !== undefined) {
-        costOg = (costOg ?? 0) + result.costOg;
+    // Walk the provider chain per chunk: one provider stumbling on one chunk
+    // should not cost the whole chunk its grades.
+    let landed = false;
+    let lastRaw = "";
+    let lastMessage = "grading not attempted";
+    for (const { fn, name } of providers) {
+      try {
+        const result = await fn({
+          system,
+          user: buildUserPrompt(question, slice, offset),
+          maxTokens: 2000,
+          temperature: 0,
+        });
+        verdicts.push(...parseVerdicts(result.content, slice.length, offset));
+        const cost = (result as { costOg?: number }).costOg;
+        if (cost !== undefined) costOg = (costOg ?? 0) + cost;
+        usedModel ??= name;
+        landed = true;
+        break;
+      } catch (error) {
+        lastRaw = (error as { rawContent?: string }).rawContent ?? "";
+        lastMessage = error instanceof Error ? error.message.slice(0, 140) : "call failed";
       }
-    } catch (error) {
+    }
+    if (!landed) {
       // Salvage complete grades from fenced or truncated output instead of
       // discarding the whole chunk.
-      const raw = (error as { rawContent?: string }).rawContent ?? "";
-      const salvaged = salvageVerdicts(raw, slice.length, offset);
+      const salvaged = salvageVerdicts(lastRaw, slice.length, offset);
       const filled: (ClaimVerdict | undefined)[] = slice.map(() => undefined);
       for (const [i, v] of salvaged) filled[i - offset] = v;
       verdicts.push(...filled);
       if (salvaged.length === 0) {
         failures++;
-        console.error(
-          "llm-grade chunk degraded to deterministic:",
-          error instanceof Error ? error.message.slice(0, 160) : "LLM call failed",
-        );
+        console.error("llm-grade chunk degraded to deterministic:", lastMessage);
       }
     }
   }
@@ -180,7 +191,7 @@ export async function llmGradeClaims(
   if (graded === 0) {
     return {
       mode: "deterministic",
-      model: config.model,
+      model: usedModel,
       costOg,
       error: "all grading chunks failed",
       verdicts,
@@ -188,7 +199,7 @@ export async function llmGradeClaims(
   }
   return {
     mode: "llm",
-    model: config.model,
+    model: usedModel,
     costOg,
     error: failures > 0 ? `${failures} chunk(s) fell back to deterministic` : undefined,
     verdicts,

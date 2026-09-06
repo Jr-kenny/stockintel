@@ -1,4 +1,4 @@
-import { chatJson, computeRouterConfig } from "@/lib/0g/compute-router";
+import { jsonProviders } from "@/lib/llm/providers";
 import { guidedSystem } from "./soul";
 
 export type DemandHypothesis = {
@@ -174,31 +174,36 @@ function salvageHypotheses(text: string): DemandHypothesis[] {
 }
 
 export async function generateHypotheses(question: string): Promise<DemandHypothesis[]> {
-  const cfg = computeRouterConfig();
-  if (!cfg.live) return deterministicHypotheses(question);
+  const providers = jsonProviders();
+  if (providers.length === 0) return deterministicHypotheses(question);
   let lastError = "unknown";
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const { content } = await chatJson({
-        system: await guidedSystem(SYSTEM),
-        user: `Objective: ${question.slice(0, 600)}`,
-        maxTokens: 4000,
-        temperature: 0.4,
-      });
-      const start = content.indexOf("{");
-      const end = content.lastIndexOf("}");
-      const parsed = JSON.parse(content.slice(start, end + 1)) as { hypotheses?: unknown[] };
-      const list = parsed?.hypotheses;
-      if (Array.isArray(list) && list.length >= 2) return coerceHypotheses(list);
-      const salvaged = salvageHypotheses(content);
-      if (salvaged.length >= 2) return salvaged;
-      lastError = `only ${Array.isArray(list) ? list.length : 0} hypotheses parsed`;
-    } catch (error) {
-      lastError = error instanceof Error ? error.message.slice(0, 160) : "LLM call failed";
-      const raw = (error as { rawContent?: string }).rawContent;
-      if (raw) {
-        const salvaged = salvageHypotheses(raw);
+  const system = await guidedSystem(SYSTEM);
+  // Every provider, twice each. Hypotheses shape the whole run, so it is worth
+  // exhausting the chain before falling back to the deterministic templates.
+  for (const { fn, name } of providers) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const { content } = await fn({
+          system,
+          user: `Objective: ${question.slice(0, 600)}`,
+          maxTokens: 4000,
+          temperature: attempt === 0 ? 0.4 : 0.6,
+        });
+        const start = content.indexOf("{");
+        const end = content.lastIndexOf("}");
+        const parsed = JSON.parse(content.slice(start, end + 1)) as { hypotheses?: unknown[] };
+        const list = parsed?.hypotheses;
+        if (Array.isArray(list) && list.length >= 2) return coerceHypotheses(list);
+        const salvaged = salvageHypotheses(content);
         if (salvaged.length >= 2) return salvaged;
+        lastError = `${name}: only ${Array.isArray(list) ? list.length : 0} hypotheses parsed`;
+      } catch (error) {
+        lastError = `${name}: ${error instanceof Error ? error.message.slice(0, 140) : "call failed"}`;
+        const raw = (error as { rawContent?: string }).rawContent;
+        if (raw) {
+          const salvaged = salvageHypotheses(raw);
+          if (salvaged.length >= 2) return salvaged;
+        }
       }
     }
   }

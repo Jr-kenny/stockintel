@@ -16,9 +16,7 @@
  * and the market leg is arithmetic on candles.
  */
 
-import { chatJson } from "@/lib/0g/compute-router";
-import { chatJsonOpenRouter, openRouterConfig } from "@/lib/llm/openrouter";
-import { chatJsonZen, zenConfig } from "@/lib/llm/zen";
+import { jsonProviders } from "@/lib/llm/providers";
 import { guidedSystem } from "./soul";
 import type { ConnectionResult } from "./connect";
 import type { Chain, EvidenceItem, IntelligenceReport } from "./report";
@@ -85,14 +83,6 @@ confidence: {band:"high"|"moderate"|"low", reason}
 Rules: no buy/sell/long/short language. No price targets you cannot derive from the
 market lines given. Cite evidence ids that exist. Speak plainly, contractions are fine,
 no em dashes.`;
-
-type Caller = (opts: {
-  system: string;
-  user: string;
-  maxTokens?: number;
-  temperature?: number;
-  timeoutMs?: number;
-}) => Promise<{ content: string }>;
 
 function parseJsonLoose(raw: string): unknown {
   const text = raw.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
@@ -289,11 +279,7 @@ export async function writeReport(params: {
   const system = await guidedSystem(CONTRACT);
   const knownIds = new Set(connection.evidence.map((e) => e.id));
 
-  const callers: { fn: Caller; name: string }[] = [{ fn: chatJson, name: "0G" }];
-  if (openRouterConfig().live) callers.push({ fn: chatJsonOpenRouter, name: "openrouter" });
-  if (zenConfig().live) callers.push({ fn: chatJsonZen, name: "zen" });
-
-  for (const { fn, name } of callers) {
+  for (const { fn, name } of jsonProviders()) {
     for (const temperature of [0.35, 0.6]) {
       try {
         const res = await fn({ system, user, maxTokens: 4000, temperature, timeoutMs: 90_000 });

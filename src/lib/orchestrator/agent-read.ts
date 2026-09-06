@@ -14,6 +14,7 @@ import { claims, inquiries } from "@/lib/db/schema";
 import { and, desc, eq, gt, isNull, notInArray } from "drizzle-orm";
 import { companyTickers, extractTicker } from "@/lib/binance/market";
 import { runInquiry, tryGradeIfReady, SOURCING_WINDOW_SECONDS } from "./run";
+import { reportSchema, type IntelligenceReport } from "./report";
 
 const sourceSchema = z.object({ label: z.string(), url: z.string() });
 
@@ -56,6 +57,12 @@ type MatchedRun = {
   contradictions: number;
   synthesis: Synthesis;
   readout: Readout;
+  /**
+   * The intelligence report. Present on runs from the report pass onward, null
+   * on older ones, so every reader has to decide what to do without it rather
+   * than assuming it exists.
+   */
+  report: IntelligenceReport | null;
 };
 
 function normTicker(raw: string): string {
@@ -94,7 +101,12 @@ async function listRuns(ticker: string): Promise<MatchedRun[]> {
     .from(inquiries)
     .where(eq(inquiries.status, "complete"))
     .orderBy(desc(inquiries.createdAt));
-  const candidates: { row: (typeof rows)[number]; synthesis: Synthesis; readout: Readout }[] = [];
+  const candidates: {
+    row: (typeof rows)[number];
+    synthesis: Synthesis;
+    readout: Readout;
+    report: IntelligenceReport | null;
+  }[] = [];
   for (const row of rows) {
     if (!row.synthesisJson) continue;
     let synthesis: Synthesis;
@@ -109,7 +121,15 @@ async function listRuns(ticker: string): Promise<MatchedRun[]> {
     } catch {
       readout = [];
     }
-    candidates.push({ row, synthesis, readout });
+    // A malformed report is treated as absent, never as a reason to drop the
+    // run: the synthesis and readout behind it are still good intelligence.
+    let report: IntelligenceReport | null = null;
+    try {
+      report = row.reportJson ? reportSchema.parse(JSON.parse(row.reportJson)) : null;
+    } catch {
+      report = null;
+    }
+    candidates.push({ row, synthesis, readout, report });
   }
   const toRun = (c: (typeof candidates)[number]): MatchedRun => ({
     inquiryId: c.row.id,
@@ -118,6 +138,7 @@ async function listRuns(ticker: string): Promise<MatchedRun[]> {
     contradictions: c.row.contradictions ?? 0,
     synthesis: c.synthesis,
     readout: c.readout,
+    report: c.report,
   });
   const direct: MatchedRun[] = [];
   const threads: MatchedRun[] = [];
@@ -143,11 +164,21 @@ export type AssessResult = {
   assessedAt: string | null;
   stale: boolean;
   note: string;
+  /**
+   * The intelligence report: executive first, then evidence, synthesis chains,
+   * four horizons, scenarios with invalidation, bottom line. This is the
+   * deliverable. Null only on runs recorded before the report pass existed.
+   */
+  report: IntelligenceReport | null;
+  /**
+   * Legacy per-company thesis. Retained so older runs still answer and nothing
+   * that already depends on this shape breaks. New callers should read `report`.
+   */
   preamble: string;
   recommendations: Synthesis["recommendations"];
 };
 
-/** Full thesis for a ticker: preamble plus priced-or-not recommendations. */
+/** The assessment for a ticker. Report when the run has one, legacy thesis otherwise. */
 export async function agentAssess(ticker: string): Promise<AssessResult> {
   const run = await findRun(ticker);
   if (!run) {
@@ -159,6 +190,7 @@ export async function agentAssess(ticker: string): Promise<AssessResult> {
       assessedAt: null,
       stale: false,
       note: "",
+      report: null,
       preamble: "",
       recommendations: [],
     };
@@ -172,6 +204,7 @@ export async function agentAssess(ticker: string): Promise<AssessResult> {
     assessedAt: run.assessedAt,
     stale,
     note,
+    report: run.report,
     preamble: run.synthesis.preamble,
     recommendations: run.synthesis.recommendations,
   };
@@ -412,6 +445,69 @@ export async function agentThesisChanges(ticker: string): Promise<ChangesResult>
       note: "Only one assessment on record. Nothing to compare yet.",
     };
   }
+  // Both runs have a report: compare at report level, which is the honest
+  // comparison. One priced-in call and one confidence band per run, plus which
+  // entities entered or left the picture. The per-company verdict diff below is
+  // only reachable for older runs, where that was the whole assessment.
+  if (current.report && previous.report) {
+    const cur = current.report;
+    const prev = previous.report;
+    const curEntities = new Map(cur.evidence.map((e) => [normCompany(e.entity), e.entity]));
+    const prevEntities = new Map(prev.evidence.map((e) => [normCompany(e.entity), e.entity]));
+    const reportFlips: ChangesResult["flips"] = [];
+    const bandScore = { low: 0, moderate: 50, high: 100 } as const;
+    if (cur.implication.pricedIn !== prev.implication.pricedIn) {
+      reportFlips.push({
+        company: cur.ticker,
+        from: prev.implication.pricedIn,
+        to: cur.implication.pricedIn,
+        confidenceFrom: bandScore[prev.confidence.band],
+        confidenceTo: bandScore[cur.confidence.band],
+      });
+    }
+    const bandMoves: ChangesResult["confidenceMoves"] =
+      cur.confidence.band !== prev.confidence.band
+        ? [
+            {
+              company: cur.ticker,
+              from: bandScore[prev.confidence.band],
+              to: bandScore[cur.confidence.band],
+            },
+          ]
+        : [];
+    const entered = [...curEntities].filter(([k]) => !prevEntities.has(k)).map(([, v]) => v);
+    const left = [...prevEntities].filter(([k]) => !curEntities.has(k)).map(([, v]) => v);
+    const didChange =
+      reportFlips.length > 0 || bandMoves.length > 0 || entered.length > 0 || left.length > 0;
+    // Direction reads off the priced-in move: a name going from priced to
+    // underpriced is the assessment strengthening, and the reverse is weakening.
+    const rank = { overpriced: 0, priced: 1, unclear: 2, underpriced: 3 } as const;
+    const shift = rank[cur.implication.pricedIn] - rank[prev.implication.pricedIn];
+    const bandShift = bandScore[cur.confidence.band] - bandScore[prev.confidence.band];
+    const dir: ChangesResult["direction"] = !didChange
+      ? "stable"
+      : shift > 0 || (shift === 0 && bandShift > 0)
+        ? "strengthening"
+        : shift < 0 || (shift === 0 && bandShift < 0)
+          ? "weakening"
+          : "mixed";
+    return {
+      found: true,
+      ticker: normTicker(ticker),
+      changed: didChange,
+      direction: dir,
+      currentAt: current.assessedAt,
+      previousAt: previous.assessedAt,
+      flips: reportFlips,
+      confidenceMoves: bandMoves,
+      added: entered,
+      removed: left,
+      note: didChange
+        ? `Priced-in went ${prev.implication.pricedIn} to ${cur.implication.pricedIn}, confidence ${prev.confidence.band} to ${cur.confidence.band}. What changed: ${cur.synthesis.whatChanged}`
+        : `No material change since ${previous.assessedAt}.`,
+    };
+  }
+
   const prevByCompany = new Map(previous.synthesis.recommendations.map((r) => [normCompany(r.company), r]));
   const currByCompany = new Map(current.synthesis.recommendations.map((r) => [normCompany(r.company), r]));
   const flips: ChangesResult["flips"] = [];
@@ -495,9 +591,49 @@ export async function agentConflicting(ticker: string): Promise<ConflictingResul
       note: `No completed assessment for ${normTicker(ticker)} yet.`,
     };
   }
-  const against = run.synthesis.recommendations
-    .filter((r) => r.verdict !== "underpriced")
-    .map((r) => ({ company: r.company, verdict: r.verdict, confidence: r.confidence, marketCall: r.marketCall }));
+  // With a report, the counter-case is already stated properly: named
+  // contradictions, bear scenario, invalidation signals, and any chain pointing
+  // down. That beats filtering per-company verdicts, which only ever said
+  // "these threads were not underpriced".
+  const against = run.report
+    ? [
+        ...run.report.synthesis.contradictions.map((c) => ({
+          company: run.report!.ticker,
+          verdict: "contradiction",
+          confidence: 0,
+          marketCall: c,
+        })),
+        ...run.report.synthesis.chains
+          .filter((c) => c.direction === "down" || c.direction === "mixed")
+          .map((c) => ({
+            company: run.report!.ticker,
+            verdict: `${c.direction} chain (${c.magnitude})`,
+            confidence: 0,
+            marketCall: `${c.claim}. ${c.soWhat}`,
+          })),
+        ...run.report.scenarios.cases
+          .filter((c) => c.case === "bear")
+          .map((c) => ({
+            company: run.report!.ticker,
+            verdict: `bear case ${c.probability}%`,
+            confidence: c.probability,
+            marketCall: c.narrative,
+          })),
+        ...run.report.scenarios.invalidation.map((inv) => ({
+          company: run.report!.ticker,
+          verdict: "invalidation",
+          confidence: 0,
+          marketCall: inv,
+        })),
+      ]
+    : run.synthesis.recommendations
+        .filter((r) => r.verdict !== "underpriced")
+        .map((r) => ({
+          company: r.company,
+          verdict: r.verdict,
+          confidence: r.confidence,
+          marketCall: r.marketCall,
+        }));
   const weakestClusters = [...run.readout]
     .sort((a, b) => a.independentSources - b.independentSources || a.confidence - b.confidence)
     .slice(0, 3)
@@ -562,9 +698,19 @@ export async function agentEvidence(ticker: string, company: string): Promise<Ev
   const run = await findRun(ticker);
   if (!run) return { ...empty, note: `No completed assessment for ${normTicker(ticker)} yet.` };
   const want = normCompany(company);
+  // Report runs resolve the entity against interpreted evidence, which names
+  // real entities. The legacy path matched against per-company thesis threads,
+  // where a headline fragment could stand in for a company.
+  const reportEvent = run.report?.evidence.find((e) => normCompany(e.entity) === want) ?? null;
   const rec = run.synthesis.recommendations.find((r) => normCompany(r.company) === want);
-  if (!rec) {
-    return { ...empty, note: `No thesis thread on ${company} in the latest assessment.` };
+  if (!reportEvent && !rec) {
+    const known = run.report
+      ? Array.from(new Set(run.report.evidence.map((e) => e.entity))).join(", ")
+      : run.synthesis.recommendations.map((r) => r.company).join(", ");
+    return {
+      ...empty,
+      note: `Nothing on ${company} in the latest assessment.${known ? ` Covered: ${known}.` : ""}`,
+    };
   }
   const cluster = run.readout.find((e) => normCompany(e.company) === want) ?? null;
   let claimRows: EvidenceResult["claims"] = [];
@@ -601,10 +747,17 @@ export async function agentEvidence(ticker: string, company: string): Promise<Ev
   return {
     found: true,
     ticker: normTicker(ticker),
-    company: rec.company,
-    verdict: rec.verdict,
-    marketCall: rec.marketCall,
-    sources: rec.sources,
+    company: reportEvent?.entity ?? rec!.company,
+    // On a report run the per-entity call is the confidence band with its stated
+    // reason, and our read stands in for the market call. There is no per-entity
+    // verdict any more, by design: one report, one priced-in call.
+    verdict: reportEvent ? `${reportEvent.confidence} confidence` : (rec?.verdict ?? null),
+    marketCall: reportEvent
+      ? `${reportEvent.ourRead} (${reportEvent.confidenceReason})`
+      : (rec?.marketCall ?? null),
+    sources: reportEvent
+      ? reportEvent.sources.map((s) => ({ label: s.label, url: s.url }))
+      : (rec?.sources ?? []),
     cluster: cluster
       ? {
           topClaim: cluster.topClaim,

@@ -36,7 +36,7 @@ const PUBLIC_URL = process.env["CONNECTOR_PUBLIC_URL"] ?? `http://localhost:${PO
 const wallet = process.env["CONNECTOR_WALLET"] ?? new ethers.Wallet(ethers.Wallet.createRandom().privateKey).address;
 
 type Evidence = { item: string; source: string; observed: string };
-type Claim = { company: string; claim: string; confidence: number; evidence: Evidence[]; why_relevant?: string; contact?: string };
+type Claim = { company: string; claim: string; confidence: number; evidence: Evidence[]; contact?: string };
 type ResearchCommand = {
   command_id: string;
   inquiry_id: string;
@@ -174,24 +174,17 @@ async function researchAndSubmit(cmd: ResearchCommand): Promise<void> {
       ? `Video "${v.title}" by ${v.channel}: transcript reveals ${content.slice(0, 180)}...`
       : `Video "${v.title}" by ${v.channel}: ${v.description.slice(0, 180)}`;
 
-    const watchPhrase = (() => {
-      const tick = cmd.question.match(/watch(?:ing)?\s+([A-Za-z]{1,6})\b/i);
-      if (tick?.[1]) return tick[1].toUpperCase();
-      const cat = (cmd.scope.category ?? "").trim();
-      if (cat.length > 8) return cat.length > 60 ? cat.slice(0,57).replace(/\s+\S*$/, "")+"..." : cat;
-      const q = cmd.question.replace(/\s+/g, " ").trim();
-      if (q.length > 8 && q.length <= 60) return q;
-      return "the watched ticker";
-    })();
-    const transcriptHint = transcript ? "transcript confirms active work" : "description points to active work";
-    const why = `YouTube via ${v.channel} on ${observed}: "${v.title.slice(0, 62)}", ${transcriptHint}. For ${company}, that build/expansion moves exposed names as it progresses. Watch the clip for scale and timing to impact.`.slice(0, 340);
+    // Interpretation removed: the collector no longer writes why a clip
+    // matters. The connection pass does that with the full evidence set.
 
     claims.push({
       company,
       claim: v.title.replace(/\s+-\s+[^-]+$/, "").slice(0, 500),
-      confidence: transcript ? 0.72 : 0.58,
+      // Collector, not analyst: confidence stays 0 and no interpretation is
+      // written. Quality is judged in source-quality.ts and meaning in the
+      // connection pass, which sees every event rather than one video.
+      confidence: 0,
       evidence: [{ item: item.slice(0, 300), source: videoUrl, observed }],
-      why_relevant: why,
       // If channel looks like individual, treat video URL as contact (individual==business when sure)
       ...(v.channel && v.channel.length < 40 ? { contact: videoUrl } : {}),
     });
@@ -219,7 +212,6 @@ async function submitClaims(cmd: ResearchCommand, claims: Claim[]): Promise<void
         claim: c.claim,
         confidence: c.confidence,
         evidence: c.evidence,
-        why_relevant: c.why_relevant,
         ...(c.contact ? { contact: c.contact } : {}),
       })),
     }),

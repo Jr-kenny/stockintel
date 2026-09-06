@@ -15,9 +15,7 @@
  * It runs before synthesis and its output is what synthesis writes from.
  */
 
-import { chatJson } from "@/lib/0g/compute-router";
-import { chatJsonOpenRouter, openRouterConfig } from "@/lib/llm/openrouter";
-import { chatJsonZen, zenConfig } from "@/lib/llm/zen";
+import { jsonProviders } from "@/lib/llm/providers";
 import { guidedSystem } from "./soul";
 import type { GradedClaim } from "./grade";
 import { confidenceBand, judgeQuality } from "./source-quality";
@@ -75,14 +73,6 @@ notObvious: what a reader misses reading these events one at a time. One paragra
 contradictions: array of strings naming evidence that points the other way. Empty array if none.
 
 Example chain: {"claim":"Hyperscaler in-house silicon is moving from pilot to volume","hops":[{"from":"Amazon","relation":"is building","to":"Trainium 3 at scale","basis":"observed","evidenceIds":["E2"]},{"from":"Trainium 3","relation":"displaces","to":"merchant GPU purchases","basis":"inferred","evidenceIds":["E2","E4"]}],"direction":"down","magnitude":"material","soWhat":"..."}`;
-
-type Caller = (opts: {
-  system: string;
-  user: string;
-  maxTokens?: number;
-  temperature?: number;
-  timeoutMs?: number;
-}) => Promise<{ content: string }>;
 
 function parseJsonLoose(raw: string): unknown {
   const text = raw.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
@@ -252,11 +242,7 @@ export async function connectEvidence(params: {
   const system = await guidedSystem(CONTRACT);
   const knownIds = new Set(index.keys());
 
-  const callers: { fn: Caller; name: string }[] = [{ fn: chatJson, name: "0G" }];
-  if (openRouterConfig().live) callers.push({ fn: chatJsonOpenRouter, name: "openrouter" });
-  if (zenConfig().live) callers.push({ fn: chatJsonZen, name: "zen" });
-
-  for (const { fn, name } of callers) {
+  for (const { fn, name } of jsonProviders()) {
     for (const temperature of [0.3, 0.6]) {
       try {
         const res = await fn({

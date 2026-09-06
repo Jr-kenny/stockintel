@@ -119,7 +119,11 @@ const GENERIC_SINGLE_NOUNS = new Set(
 );
 
 type Evidence = { item: string; source: string; observed: string };
-type Claim = { company: string; claim: string; confidence: number; evidence: Evidence[]; why_relevant?: string; contact?: string };
+/**
+ * What a collector submits. `confidence` is always 0 and stays on the wire only
+ * so older orchestrators parse; judgment is the orchestrator's job.
+ */
+type Claim = { company: string; claim: string; confidence: number; evidence: Evidence[]; contact?: string };
 type ResearchCommand = {
   command_id: string;
   inquiry_id: string;
@@ -382,6 +386,12 @@ function cleanName(raw: string): string | null {
   return name;
 }
 
+/**
+ * Local ordering only: which of several headlines about the same entity to lead
+ * with, and which evidence to attach first. This is NOT a confidence claim and
+ * never leaves the agent. Claim quality is judged by the orchestrator in
+ * source-quality.ts, where the whole evidence set is visible.
+ */
 function scoreSignal(signal: RawSignal): number {
   // Primary regulatory filings start high — the company said it itself.
   let confidence = signal.origin === "filing" ? 0.78 : 0.58;
@@ -499,40 +509,21 @@ function toClaims(signals: RawSignal[], cmd: ResearchCommand): Claim[] {
       if (evidence.length >= 4) break;
     }
 
-    let confidence = scoreSignal(bucket.best);
-    // Independent corroboration across sources lifts confidence — real
-    // multi-source confirmation, not five copies of one article.
-    const distinctHosts = new Set(evidence.map((e) => sourceClusterKey(e.source).split("/")[0]));
-    if (distinctHosts.size >= 2) confidence += 0.06;
-    if (bucket.filingSeen) confidence += 0.04;
-    confidence = Math.min(0.92, Number(confidence.toFixed(2)));
-
-    // Why this lead matters for the watched ticker — varied, evidence-specific
-    const watchPhrase = (() => {
-      const tick = cmd.question.match(/watch(?:ing)?\s+([A-Za-z]{1,6})\b/i);
-      if (tick?.[1]) return tick[1].toUpperCase();
-      const cat = (cmd.scope.category ?? "").trim();
-      if (cat.length > 8) return cat.length > 64 ? cat.slice(0, 61).replace(/\s+\S*$/, "") + "..." : cat;
-      const q = cmd.question.replace(/\s+/g, " ").trim();
-      if (q.length > 8 && q.length <= 64) return q;
-      // fallback: don't dump raw question truncated
-      return "the watched ticker";
-    })();
-    const verbRaw = bucket.best.title.match(SIGNAL_RE)?.[0] ?? "expansion";
-    const verb = verbRaw.toLowerCase();
-    const sourceSite = (() => {
-      try { return bucket.best.publisherUrl ? new URL(bucket.best.publisherUrl).hostname.replace(/^www\./, "") : "news"; } catch { return "news"; }
-    })();
-    const date = bucket.best.publishedAt;
-    const titleSnippet = bucket.best.title.replace(/\s+-\s+[^-]+$/, "").slice(0, 72).replace(/"/g, "'");
-    const verbType: "invest" | "build" | "open" | "expand" = /invest|funding|raise|acquir|merger/i.test(verb) ? "invest" : /construction|build|groundbreak|refurbish|renovat/i.test(verb) ? "build" : /open|inaugurat|commission|launch|unveil|flagship/i.test(verb) ? "open" : "expand";
-    const whyByType: Record<string, string> = {
-      invest: `We found ${bucket.name} shows ${verb}, reported via ${sourceSite} on ${date}. Capital moves like this travel down the exposure chain. Worth checking whether ${watchPhrase} sits downstream and if the market has reacted.`,
-      build: `${bucket.name}: ${verb} flagged via ${sourceSite} on ${date}, "${titleSnippet}". Builds at this stage create exposure for suppliers and infrastructure names. Worth confirming scale and timing to impact.`,
-      open: `Via ${sourceSite} on ${date}: ${bucket.name} ${verb}, "${titleSnippet}". Openings reprice exposed names fast. Check whether the move is already in the price.`,
-      expand: `We found ${bucket.name}, ${verb} signal via ${sourceSite} on ${date}. Expansions like this often move exposed tickers within weeks. Worth tracing the impact path into ${watchPhrase}.`,
-    };
-    const whyRelevant = whyByType[verbType]!.slice(0, 360);
+    // No confidence, no interpretation. This agent is a collector: it reports
+    // what it found and where, and the orchestrator judges it.
+    //
+    // It used to score its own findings, and grade.ts read that number straight
+    // into the `quality` dimension, so a regex scraper's guess became part of
+    // the analyst's weighting. It also wrote `whyRelevant` from four hardcoded
+    // templates keyed off a headline verb, which produced confident sentences
+    // about exposure paths it had not traced. Quality now comes from
+    // source-quality.ts (publisher tier, freshness, independent corroboration)
+    // and interpretation from the connection pass, which sees every event at
+    // once instead of one headline in isolation.
+    //
+    // The field stays on the wire as a fixed zero so older orchestrators still
+    // parse a submission from an updated agent.
+    const confidence = 0;
 
     // Contact: when an individual is the business (X/Medium/LinkedIn post tied 1:1
     // to the name), the source itself is the contact — only when sure.
@@ -552,14 +543,16 @@ function toClaims(signals: RawSignal[], cmd: ResearchCommand): Claim[] {
       claim: bucket.best.title.replace(/\s+-\s+[^-]+$/, "").slice(0, 500),
       confidence,
       evidence,
-      why_relevant: whyRelevant,
       ...(contact ? { contact } : {}),
     });
     if (claims.length >= 8) break;
   }
 
-  // Strongest first.
-  claims.sort((a, b) => b.confidence - a.confidence);
+  // Freshest first. Ordering by a self-assigned score is exactly what this
+  // agent no longer does, and observation date is a fact rather than a judgment.
+  claims.sort((a, b) =>
+    (b.evidence[0]?.observed ?? "").localeCompare(a.evidence[0]?.observed ?? ""),
+  );
   return claims;
 }
 
@@ -685,7 +678,7 @@ async function researchAndSubmit(command: ResearchCommand) {
       console.log(`✓ submitted ${claims.length} claim(s):`);
       for (const c of claims) {
         console.log(
-          `    • ${c.company} @ ${(c.confidence * 100).toFixed(0)}% ← ${c.evidence[0]?.source}`,
+          `    • ${c.company} · ${c.evidence[0]?.observed ?? "undated"} ← ${c.evidence[0]?.source}`,
         );
       }
     } else {
