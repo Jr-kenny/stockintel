@@ -105,7 +105,8 @@ Each hypothesis must be:
 Return JSON: { "hypotheses": [{ "label": string, "demandType": string, "entityTypes": string[], "signals": string[], "searchHints": string[], "whatToVerify": string[] }] }
 
 Rules:
-- demandType should be concrete: what event and what exposure path could move the ticker, and why — derived from the watcher's actual question, never a preset bucket
+- ground every hypothesis in the OBSERVED block when one is present: reference the tape, the headlines, or the wave-one returns by name, and never invent an event the observation does not contain
+- demandType should be concrete: what event and what exposure path could move the ticker, and why, derived from the watcher's actual question, never a preset bucket
 - entityTypes 2-4 items
 - signals 3-5 items, observable public signals
 - searchHints 2-3 short queries an investigator can run verbatim
@@ -173,11 +174,17 @@ function salvageHypotheses(text: string): DemandHypothesis[] {
   return coerceHypotheses(found);
 }
 
-export async function generateHypotheses(question: string): Promise<DemandHypothesis[]> {
+export async function generateHypotheses(
+  question: string,
+  observation?: string,
+): Promise<DemandHypothesis[]> {
   const providers = jsonProviders();
   if (providers.length === 0) return deterministicHypotheses(question);
   let lastError = "unknown";
   const system = await guidedSystem(SYSTEM);
+  const user = observation?.trim()
+    ? `Objective: ${question.slice(0, 600)}\n\nOBSERVED BEFORE HYPOTHESIZING (ground every hypothesis in this, never invent events):\n${observation.slice(0, 3000)}`
+    : `Objective: ${question.slice(0, 600)}\n\nNo observation was captured before this call. Hypothesize from the question text alone and keep each hypothesis testable rather than asserting facts.`;
   // Every provider, twice each. Hypotheses shape the whole run, so it is worth
   // exhausting the chain before falling back to the deterministic templates.
   for (const { fn, name } of providers) {
@@ -185,7 +192,7 @@ export async function generateHypotheses(question: string): Promise<DemandHypoth
       try {
         const { content } = await fn({
           system,
-          user: `Objective: ${question.slice(0, 600)}`,
+          user,
           maxTokens: 4000,
           temperature: attempt === 0 ? 0.4 : 0.6,
         });

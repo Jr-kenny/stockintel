@@ -13,9 +13,16 @@ export type InvestigationState = {
   createdAt: string;
   depth?: number;
   tokenUsed?: number;
+  wave?: 1 | 2;
+  wave2StartedAt?: string;
+  observationText?: string;
 };
 
-export function buildInitialInvestigation(question: string, hypotheses: DemandHypothesis[]): InvestigationState {
+export function buildInitialInvestigation(
+  question: string,
+  hypotheses: DemandHypothesis[],
+  opts?: { wave?: 1 | 2; wave2StartedAt?: string; observationText?: string },
+): InvestigationState {
   const inventoryHint = question.slice(0, 120);
   return {
     objective: question,
@@ -34,6 +41,9 @@ export function buildInitialInvestigation(question: string, hypotheses: DemandHy
     createdAt: new Date().toISOString(),
     depth: 0,
     tokenUsed: 0,
+    wave: opts?.wave ?? 1,
+    ...(opts?.wave2StartedAt ? { wave2StartedAt: opts.wave2StartedAt } : {}),
+    ...(opts?.observationText ? { observationText: opts.observationText.slice(0, 3000) } : {}),
   };
 }
 

@@ -6,10 +6,10 @@ import { gradeClaims } from "./grade";
 import type { InvestigationState } from "./investigation";
 import {
   updateInvestigationWithGraded,
-  deriveFollowUpTasks,
   shouldRecurse,
   estimateInvestigationTokens,
 } from "./investigation";
+import { planFollowUps } from "./plan-followups";
 import type { ResearchCommand } from "./run";
 import { MAX_DEPTH, MAX_SOURCES, TOKEN_BUDGET, SOURCING_WINDOW_SECONDS } from "./run";
 
@@ -103,7 +103,12 @@ export async function runFollowUpRounds(params: {
       break;
     }
 
-    const tasks = deriveFollowUpTasks(currentGraded, investigation);
+    const tasks = await planFollowUps({
+      question: params.question,
+      graded: currentGraded,
+      state: investigation,
+      contradictions: params.contradictions,
+    });
     if (tasks.length === 0) {
       console.log("[recurse] no follow-up tasks derived");
       break;
