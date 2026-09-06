@@ -148,9 +148,12 @@ export async function agentOsTicker(
   const tool = pickTool(tools, ["ticker", "price", "24hr", "24h"]);
   if (!tool) throw new Error("agent-os has no ticker tool");
   const text = await callTool(live, tool, { symbol });
-  const price =
-    Number(/"?(?:lastPrice|price|last)"?\s*[:=]\s*"?([\d.]+)/i.exec(text)?.[1]) ||
-    Number(/([\d]+\.[\d]+)/.exec(text)?.[1] ?? NaN);
+  // Preference order: a last price beats an average every time.
+  const priceMatch =
+    /"?(?:lastPrice)"?\s*[:=]\s*"?([\d.]+)/i.exec(text) ??
+    /"?(?:last|close|currentPrice)"?\s*[:=]\s*"?([\d.]+)/i.exec(text) ??
+    /"?(?:price)"?\s*[:=]\s*"?([\d.]+)/i.exec(text);
+  const price = Number(priceMatch?.[1]) || Number(/([\d]+\.[\d]+)/.exec(text)?.[1] ?? NaN);
   const pct =
     Number(
       /"?(?:priceChangePercent|changePercent|change24h)"?\s*[:=]\s*"?([+-]?[\d.]+)/i.exec(

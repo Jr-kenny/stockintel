@@ -66,8 +66,28 @@ function pick(objs: Record<string, unknown>[], names: RegExp, symbol?: string): 
   return null;
 }
 
-function pickSymbol(objs: Record<string, unknown>[]): string | null {
-  for (const o of objs) {
+/** Price keys in preference order. Averages never beat a last price. */
+const PRICE_KEYS = ["lastPrice", "last", "close", "currentPrice", "price", "weightedAvgPrice"];
+
+/** First price found walking the preference order, optionally scoped to a symbol. */
+function pickPrice(objs: Record<string, unknown>[], symbol?: string): number | null {
+  const scoped = symbol
+    ? objs.filter((o) => o["symbol"] === undefined || String(o["symbol"]).toUpperCase() === symbol.toUpperCase())
+    : objs;
+  for (const key of PRICE_KEYS) {
+    for (const o of scoped) {
+      for (const [k, v] of Object.entries(o)) {
+        if (k.toLowerCase() === key.toLowerCase()) {
+          const n = asNumber(v);
+          if (n !== null) return n;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function pickSymbol(objs: Record<string, unknown>[]): string | null {  for (const o of objs) {
     for (const [k, v] of Object.entries(o)) {
       if (/^(symbol|pair|instrument)$/i.test(k) && typeof v === "string" && v.trim()) {
         return v.trim().toUpperCase();
@@ -94,7 +114,7 @@ export function quoteFromMcpPayload(payload: Json, fallbackTicker?: string): Sup
   if (objs.length === 0) return null;
   const symbol = pickSymbol(objs) ?? fallbackTicker?.toUpperCase() ?? "";
   if (!symbol) return null;
-  const price = pick(objs, /^(lastPrice|price|last|close|currentPrice|weightedAvgPrice)$/i, symbol);
+  const price = pickPrice(objs, symbol);
   if (price === null) return null;
   return {
     ticker: fallbackTicker?.toUpperCase() ?? symbol.replace(/USDT$|BUSDT$/, ""),
