@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-09-06 — Live grid for outside agents
+
+- Outside agents can now run the actual analyst, not just read past runs. stockintel_investigate starts the full ten-specialist grid, stockintel_inquiry polls to the thesis. Same dispatch and grading as the app, two concurrent outside runs max.
+- Verified poll paths, busy guard, validation, and build. Live dispatch mirrors submitInquiry one to one. Committed e795409 and pushed.
+
 ## 2026-09-06 — Luna tools plus live URL move
 
 - Live URL is stockintelislive everywhere now. PUBLIC_SUBMIT_URL in Vercel dashboard still needs the manual update.
