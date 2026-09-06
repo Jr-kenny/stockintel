@@ -1,5 +1,9 @@
 # Memory
 
+## 2026-09-06 — Connect-your-agent guides
+
+- How-it-works page carries a connect-your-agent section now: per-client setup for Claude Code, VS Code, Cursor, ChatGPT and Codex, plus what each of the nine tools does. README has the same in short form.
+
 ## 2026-09-06 — Live grid for outside agents
 
 - Outside agents can now run the actual analyst, not just read past runs. stockintel_investigate starts the full ten-specialist grid, stockintel_inquiry polls to the thesis. Same dispatch and grading as the app, two concurrent outside runs max.
