@@ -1,5 +1,10 @@
 # Memory
 
+## 2026-09-06 — Agent intelligence tools
+
+- Calling agents get granularity now: stockintel_assess for the full thesis, stockintel_clusters for grouped evidence without verdicts, stockintel_read for market context.
+- Shared core in agent-read.ts serves the latest completed run per ticker. Honest empty when none exists. Verified against the real Sept 5 NVDA run on all surfaces. Committed 03ec1d8 and pushed.
+
 ## 2026-09-06 — Agent OS correction (unrecognized client)
 
 - Binance consent rejects any agent outside its approved clients, so the in-app OAuth authorize flow is removed entirely. It led to that error for everyone.
