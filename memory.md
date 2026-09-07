@@ -292,6 +292,25 @@ Recovery unit-tested on all three cases including "genuinely still working" (cor
 Note: the report's own E2 entry describes the watch-keyword match as low-confidence noise — the
 analyst diagnosed the bug in its own evidence set.
 
+**Agent-side gap closed and grid redeployed.** `topicQuestion` covers every path today, but the
+nine question-tokenizing agents each carry their own `STOPWORDS` copy and none held "watch", so an
+agent called directly was still wrong on its own. Framing verbs and generic filler added to all
+nine; subject-bearing terms (export, supply, controls, china, datacenter) deliberately kept.
+media-youtube untouched, it never tokenizes the question.
+
+Proven by posting the RAW unmodified question straight to web-research, bypassing the orchestrator
+fix: `queries: ["watch","nvda"]` → `["nvda"]`, raw signals 202 → 15.
+
+Deployed `bd239e5` to AWS via SSM (`02176f2` → `bd239e5`), restarted all ten units, 0 failed, all
+ten ports 200, fresh registrations. Confirmed on the box with the raw question: `queries: ["nvda"]`.
+Local dev grid stopped afterwards, temp logs and TEST- rows cleaned.
+
+Deploy recipe that works (SSM, no interactive shell):
+`aws ssm send-command --instance-ids i-0018b77942c4452bc --document-name AWS-RunShellScript`
+then `cd /opt/stockintel && GIT_SSH_COMMAND="ssh -i /root/.ssh/aws-agents" git pull --ff-only
+origin master`, then restart `stockintel-<agent>` units by name. Poll with
+`aws ssm get-command-invocation`. Remote box is `ip-172-31-5-156`, agents bind `100.61.3.35`.
+
 ## 2026-09-06 — Thesis first
 
 - Live investigation leads everywhere now: first tool, first skill entry, first demo step. Stored reads are labeled memory and admit age past a day.
