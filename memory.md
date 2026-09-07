@@ -255,6 +255,43 @@ without a full thesis per cluster.
   inference, or speculation.
 - Join event dates against price moves for the priced-in call. Both inputs already exist.
 
+## 2026-09-07 — Empty reports on complete runs, and the "watch" leak
+
+Two real bugs behind "run says complete, report is empty". Both fixed and verified live.
+
+**1. Status was written before the report.** `gradeAndSynthesize` set `status: "complete"`
+alongside the readout, then ran the connection and report passes afterwards inside a `try` whose
+`catch` only logged. Any poll landing in that gap, or any run whose report pass died (invocation
+ceiling, redeploy, crash), returned `{result: null, error: null}` — success with nothing in it, and
+no way for a caller to tell that apart from a genuinely empty run. Now the row goes to `grading`
+after grading, and `status: "complete"` is written in the SAME update as `report_json`. The catch
+completes the run with the failure recorded on `error` instead of swallowing it.
+
+**2. "Watch" was a search term.** Agents tokenize the question into their fallback query, their
+relevance vocabulary, and their EDGAR full-text topics. `STOPWORDS` (duplicated in all nine agents)
+never included "watch", so `"Watch NVDA: ..."` searched SEC 8-Ks for **watch** — EDGAR only takes
+the first two topic words — and the relevance gate is a substring match, so any filing containing
+"watch" or "change" or "value" passed. That is the whole mechanism behind Rank One Computing,
+SYNLOGIC, STURM RUGER et al. appearing at 82% in an NVDA run. Fixed centrally in `topicQuestion`
+at the single `dispatchWave` funnel rather than in nine separately deployed agents: strips the
+framing verb, drops generic filler ("happening", "materially", "world", "value", "change"), keeps
+real signal ("export", "controls", "supply"). Safe because no agent sends question text to a model.
+The stored question is untouched, so the UI still shows what was asked.
+
+Supporting: `tryGradeIfReady` now also handles `grading` rows (`finishStalledReport` — adopts a
+stored report, or completes with the reason after 300s idle, or retries a dead grade), and both
+poll paths were gated on `collecting` only, so stalled rows were unreachable. Read side now
+explains a complete-but-empty run instead of answering null/null, which is what surfaces the
+already-broken historical rows.
+
+Verified: EDGAR topics went `["watch","nvda"]` → `["nvda"]` on a live run; run held at `grading`
+with 30 claims / 16 clusters while writing, then completed with a 24KB report, 9 sections,
+3 chains; prod `INQ-mtqiws5an6ew` returns a full report. tsc clean, build passes, no new lint.
+Recovery unit-tested on all three cases including "genuinely still working" (correctly untouched).
+
+Note: the report's own E2 entry describes the watch-keyword match as low-confidence noise — the
+analyst diagnosed the bug in its own evidence set.
+
 ## 2026-09-06 — Thesis first
 
 - Live investigation leads everywhere now: first tool, first skill entry, first demo step. Stored reads are labeled memory and admit age past a day.

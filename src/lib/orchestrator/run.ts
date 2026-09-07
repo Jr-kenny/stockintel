@@ -107,6 +107,63 @@ async function dispatchToAgent(endpoint: string, command: ResearchCommand): Prom
   }
 }
 
+/**
+ * Generic analytical filler — words a question uses to ask its question rather
+ * than to name its subject.
+ *
+ * Agents derive three things from the question text, all of them keyword-driven:
+ * the fallback search query, the relevance vocabulary, and the EDGAR full-text
+ * topics. EDGAR takes only the FIRST TWO topic words, so a single filler word in
+ * slot two spends an entire primary-source lookup on noise, and the relevance
+ * gate is a substring match that waves through anything containing "change" or
+ * "value". Together that is how 8-K filings from unrelated registrants ended up
+ * as high-confidence claims in a run about NVDA.
+ *
+ * Only words that are never themselves a subject belong here. Terms like
+ * "export", "controls" or "supply" must survive, because that is the actual
+ * signal in a more specific question.
+ */
+const FILLER_TERMS = new Set(
+  (
+    "happening happen happens materially material world worldwide value values " +
+    "change changes changing matter matters currently anything something everything " +
+    "latest update updates news thing things going really actually"
+  ).split(" "),
+);
+
+/**
+ * Instruction verbs that frame a question without being part of its subject.
+ * "Watch NVDA: ..." is an order to us, not a thing to search for.
+ */
+const FRAMING_PREFIX =
+  /^\s*(?:please\s+)?(?:watch|watching|monitor|monitoring|track|tracking|follow|following|keep\s+an\s+eye\s+on)\b[\s:,-]*/i;
+
+/**
+ * The question as agents should read it for search terms: framing verb removed,
+ * filler dropped, subject and word order intact.
+ *
+ * Normalized here, at the single dispatch funnel, rather than in each agent's
+ * STOPWORDS set: that set is duplicated across nine separately deployed
+ * services, so fixing it there would need nine redeploys to take effect. Safe to
+ * reshape because no agent sends this text to a model — each one only tokenizes
+ * it. The stored question is left untouched so the run still displays what was
+ * asked.
+ */
+export function topicQuestion(question: string): string {
+  const withoutFraming = question.replace(FRAMING_PREFIX, "").trim();
+  const kept = withoutFraming
+    .split(/\s+/)
+    .filter((word) => {
+      const bare = word.toLowerCase().replace(/[^a-z0-9]/g, "");
+      return bare.length === 0 || !FILLER_TERMS.has(bare);
+    })
+    .join(" ")
+    .trim();
+  // Never hand back nothing: a question made entirely of framing and filler is
+  // still better dispatched verbatim than as an empty string.
+  return kept || withoutFraming || question.trim();
+}
+
 function extractScope(question: string): { category?: string; geography?: string } {
   const geoMatch = question.match(
     /\b(nigeria|ghana|kenya|south africa|egypt|germany|africa|lagos|europe|us|usa)\b/i,
@@ -187,7 +244,7 @@ async function dispatchWave(params: {
   const base = {
     command_id: newId("CMD"),
     inquiry_id: params.inquiryId,
-    question: params.question,
+    question: topicQuestion(params.question),
     scope: params.scope,
     ...(params.hypotheses?.length ? { hypotheses: params.hypotheses } : {}),
     ...(params.investigation ? { investigation: params.investigation } : {}),
@@ -510,9 +567,66 @@ export async function runInquiry(inquiryId: string, submitUrl: string) {
  * answered inside the current wave. Returns true when the caller should
  * refetch the inquiry after.
  */
+/**
+ * Longer than any single serverless invocation can survive, so a row idle for
+ * this long is not "still working" — nothing is holding it.
+ */
+const STALLED_REPORT_MS = 300_000;
+
+/**
+ * Resume a run whose analysis pass never returned.
+ *
+ * Grading is made durable before the report pass begins, so a process that dies
+ * between the two (invocation ceiling, redeploy, crash) leaves the row at
+ * "grading" holding evidence but no report. Nothing else would ever move it: the
+ * poll only advances "collecting" rows, which is how a run can sit unfinished.
+ *
+ * Three cases, in order of how much survived:
+ *   - report stored: only the status write was lost, so adopt it and complete.
+ *   - readout but no report: the analysis pass died. Complete with the reason
+ *     rather than let the caller poll a dead run, and keep the evidence.
+ *   - neither: grading itself died. Hand back to gradeAndSynthesize, which has
+ *     its own staleness guard and will start the grade over.
+ */
+async function finishStalledReport(inquiry: typeof inquiries.$inferSelect): Promise<boolean> {
+  if (inquiry.reportJson) {
+    await db
+      .update(inquiries)
+      .set({ status: "complete", updatedAt: nowIso() })
+      .where(eq(inquiries.id, inquiry.id));
+    return true;
+  }
+
+  const updatedMs = inquiry.updatedAt ? Date.parse(inquiry.updatedAt) : 0;
+  const idleMs = Date.now() - updatedMs;
+  if (!Number.isFinite(idleMs) || idleMs < STALLED_REPORT_MS) return false;
+
+  if (inquiry.readoutJson) {
+    console.error(
+      `[recover] ${inquiry.id} stalled in the analysis pass for ${Math.round(idleMs / 1000)}s — completing with evidence only`,
+    );
+    await db
+      .update(inquiries)
+      .set({
+        status: "complete",
+        error:
+          "Evidence was collected and graded, but the analysis pass stopped before writing a report. The evidence below stands; re-run for a thesis.",
+        updatedAt: nowIso(),
+      })
+      .where(eq(inquiries.id, inquiry.id));
+    return true;
+  }
+
+  console.error(`[recover] ${inquiry.id} stalled before grading finished — retrying the grade`);
+  await gradeAndSynthesize(inquiry.id);
+  return true;
+}
+
 export async function tryGradeIfReady(inquiryId: string): Promise<boolean> {
   const [inquiry] = await db.select().from(inquiries).where(eq(inquiries.id, inquiryId));
-  if (!inquiry || inquiry.status !== "collecting" || !inquiry.windowClosesAt) return false;
+  if (!inquiry) return false;
+  if (inquiry.status === "grading") return finishStalledReport(inquiry);
+  if (inquiry.status !== "collecting" || !inquiry.windowClosesAt) return false;
   const { wave, wave2StartedAt } = parseWave(inquiry.investigationJson);
 
   const windowClosed = Date.now() > Date.parse(inquiry.windowClosesAt);
@@ -1015,10 +1129,13 @@ export async function gradeAndSynthesize(inquiryId: string) {
       void anchorOpportunity(oppId);
     }
 
+    // Grading results are durable now, but the run does NOT claim to be
+    // complete yet. The report is written below, and a poll that saw "complete"
+    // here would hand back an empty result with no error to explain it.
     await db
       .update(inquiries)
       .set({
-        status: "complete",
+        status: "grading",
         claimsReceived: cappedGraded.length,
         sourcesClustered: totalClusters,
         contradictions,
@@ -1032,7 +1149,8 @@ export async function gradeAndSynthesize(inquiryId: string) {
 
     // Connection pass - the analyst step. Runs on the FULL graded set so the
     // report is written from named causal chains rather than from truncated
-    // claim rows. Failure here is not fatal: the readout is already stored.
+    // claim rows. The readout is already stored, so a failure here costs the
+    // report but not the evidence — it must still be reported, not swallowed.
     try {
       // Market context for the connection pass. Best-effort: the chains are
       // about the events, and a missing snapshot must not cost us the analysis.
@@ -1099,9 +1217,12 @@ export async function gradeAndSynthesize(inquiryId: string) {
         marketLines: marketBlock ? marketBlock.split("\n").filter(Boolean) : [],
         pricedIn,
       });
+      // The report is stored and the run is complete in the same write, so a
+      // poll can never observe "complete" without the document it promises.
       await db
         .update(inquiries)
         .set({
+          status: "complete",
           reportJson: JSON.stringify(written.report),
           reportMode: written.mode,
           updatedAt: nowIso(),
@@ -1112,7 +1233,19 @@ export async function gradeAndSynthesize(inquiryId: string) {
       );
       if (written.issues.length > 0) console.log(`[report] issues: ${written.issues.join(" | ")}`);
     } catch (err) {
+      // The evidence survived, the analysis did not. Complete the run so it
+      // stops polling, and say so on the row: a silent catch here is what
+      // produced "complete" runs whose result was null with error also null.
+      const detail = String((err as Error)?.message ?? err).slice(0, 300);
       console.error("connection pass failed (readout kept):", err);
+      await db
+        .update(inquiries)
+        .set({
+          status: "complete",
+          error: `Evidence collected and graded, but the analysis pass failed, so there is no report for this run: ${detail}`,
+          updatedAt: nowIso(),
+        })
+        .where(eq(inquiries.id, inquiryId));
     }
 
     void anchorRecord({

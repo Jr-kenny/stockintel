@@ -130,10 +130,12 @@ export const getInquiry = createServerFn({ method: "POST" })
 
     // Serverless-safe grading trigger — runs AWAITED inside this request so
     // Vercel keeps the function alive until grading finishes.
-    // tryGradeIfReady handles both cases:
+    // tryGradeIfReady handles these cases:
     //  - window closed → grade immediately
     //  - all dispatched agents responded → early grade (skip waiting full window)
-    if (row.status === "collecting" && row.windowClosesAt) {
+    //  - stalled in "grading" → resume or close out the run, so a report pass
+    //    that died cannot leave the row polling forever
+    if ((row.status === "collecting" && row.windowClosesAt) || row.status === "grading") {
       try {
         const graded = await tryGradeIfReady(id);
         if (graded) {

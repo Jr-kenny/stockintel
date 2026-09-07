@@ -327,7 +327,9 @@ export async function agentInquiryStatus(inquiryId: string): Promise<Investigati
   await ensureSchema();
   let [row] = await db.select().from(inquiries).where(eq(inquiries.id, inquiryId));
   if (!row) return null;
-  if (row.status === "collecting" && row.windowClosesAt) {
+  // "grading" is included so a run whose report pass died gets resumed or
+  // closed out here. Gating on "collecting" alone left those rows unreachable.
+  if ((row.status === "collecting" && row.windowClosesAt) || row.status === "grading") {
     try {
       const graded = await tryGradeIfReady(inquiryId);
       if (graded) {
@@ -338,6 +340,7 @@ export async function agentInquiryStatus(inquiryId: string): Promise<Investigati
       console.error("agent poll grading trigger failed:", err);
     }
   }
+  const result = row.status === "complete" ? resultFromRow(row) : null;
   return {
     inquiryId: row.id,
     status: row.status as InvestigationStatus["status"],
@@ -348,8 +351,16 @@ export async function agentInquiryStatus(inquiryId: string): Promise<Investigati
       claimsReceived: row.claimsReceived ?? 0,
       sourcesClustered: row.sourcesClustered ?? 0,
     },
-    result: row.status === "complete" ? resultFromRow(row) : null,
-    error: row.error,
+    result,
+    // A complete run with nothing to show has to say so. Runs recorded before
+    // the report write was ordered after the status write are stored exactly
+    // that way, and answering {result: null, error: null} tells the caller
+    // the run succeeded while handing back nothing.
+    error:
+      row.error ??
+      (row.status === "complete" && !result
+        ? "This run completed without a readable report. Its evidence was collected, but no analysis was stored, so there is nothing to summarize. Re-run for a thesis."
+        : null),
   };
 }
 
