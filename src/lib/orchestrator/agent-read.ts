@@ -13,8 +13,17 @@ import { db, ensureSchema, newId, nowIso } from "@/lib/db";
 import { claims, inquiries } from "@/lib/db/schema";
 import { and, desc, eq, gt, isNull, notInArray } from "drizzle-orm";
 import { companyTickers, extractTicker } from "@/lib/binance/market";
-import { runInquiry, tryGradeIfReady, SOURCING_WINDOW_SECONDS } from "./run";
 import { reportSchema, type IntelligenceReport } from "./report";
+
+/**
+ * Sourcing window hint for poll callers. The orchestrator service on AWS owns
+ * the real window (run.ts), this only tells the client how long to expect.
+ * Kept local so the web build never pulls the orchestrator into serverless.
+ */
+const SOURCING_WINDOW_SECONDS = Math.min(
+  3600,
+  Math.max(60, Number(process.env["PRIME_SOURCING_WINDOW_SECONDS"] ?? 300)),
+);
 
 const sourceSchema = z.object({ label: z.string(), url: z.string() });
 
@@ -322,24 +331,11 @@ function resultFromRow(row: typeof inquiries.$inferSelect): InvestigationStatus[
   }
 }
 
-/** Poll one investigation. Mirrors the app poll: triggers grading when due. */
+/** Poll one investigation. Read-only: the orchestrator service advances the run. */
 export async function agentInquiryStatus(inquiryId: string): Promise<InvestigationStatus | null> {
   await ensureSchema();
-  let [row] = await db.select().from(inquiries).where(eq(inquiries.id, inquiryId));
+  const [row] = await db.select().from(inquiries).where(eq(inquiries.id, inquiryId));
   if (!row) return null;
-  // "grading" is included so a run whose report pass died gets resumed or
-  // closed out here. Gating on "collecting" alone left those rows unreachable.
-  if ((row.status === "collecting" && row.windowClosesAt) || row.status === "grading") {
-    try {
-      const graded = await tryGradeIfReady(inquiryId);
-      if (graded) {
-        const [fresh] = await db.select().from(inquiries).where(eq(inquiries.id, inquiryId));
-        if (fresh) row = fresh;
-      }
-    } catch (err) {
-      console.error("agent poll grading trigger failed:", err);
-    }
-  }
   const result = row.status === "complete" ? resultFromRow(row) : null;
   return {
     inquiryId: row.id,
@@ -401,8 +397,8 @@ export async function agentInvestigate(question: string): Promise<InvestigationS
     createdAt: ts,
     updatedAt: ts,
   });
-  const submitUrl = process.env["PUBLIC_SUBMIT_URL"] ?? "http://localhost:8080";
-  await runInquiry(id, `${submitUrl}/api/claims/submit`);
+  // The orchestrator service on AWS owns dispatch. This returns as soon as
+  // the row exists and the service picks it up on its next tick.
   return { ok: true, inquiryId: id, windowSeconds: SOURCING_WINDOW_SECONDS };
 }
 

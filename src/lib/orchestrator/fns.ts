@@ -3,8 +3,17 @@ import { z } from "zod";
 import { db, ensureSchema, nowIso, newId } from "@/lib/db";
 import { inquiries, agents, supplyRecords, accounts } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
-import { runInquiry, tryGradeIfReady, SOURCING_WINDOW_SECONDS } from "@/lib/orchestrator/run";
 import { reportSchema, type IntelligenceReport } from "@/lib/orchestrator/report";
+
+/**
+ * Sourcing window hint for the UI poll. The orchestrator service on AWS owns
+ * the real window (run.ts), this only tells the client how long to expect.
+ * Kept local so the web build never pulls the orchestrator into serverless.
+ */
+const SOURCING_WINDOW_SECONDS = Math.min(
+  3600,
+  Math.max(60, Number(process.env["PRIME_SOURCING_WINDOW_SECONDS"] ?? 300)),
+);
 
 export type { IntelligenceReport };
 
@@ -61,10 +70,9 @@ export const submitInquiry = createServerFn({ method: "POST" })
       createdAt: ts,
       updatedAt: ts,
     });
-    // Dispatch is now quick (no 90s wait) — await it so Vercel keeps the
-    // function alive until commands are out. Grading happens later via poll.
-    const submitUrl = process.env["PUBLIC_SUBMIT_URL"] ?? "http://localhost:8080";
-    await runInquiry(id, `${submitUrl}/api/claims/submit`);
+    // The orchestrator service on AWS owns dispatch. This returns as soon as
+    // the row exists and the service picks it up on its next tick, so the
+    // first poll may show dispatching with 0 agents. That is normal.
     return { inquiryId: id };
   });
 
@@ -128,25 +136,8 @@ export const getInquiry = createServerFn({ method: "POST" })
     let [row] = await db.select().from(inquiries).where(eq(inquiries.id, id));
     if (!row) return null;
 
-    // Serverless-safe grading trigger — runs AWAITED inside this request so
-    // Vercel keeps the function alive until grading finishes.
-    // tryGradeIfReady handles these cases:
-    //  - window closed → grade immediately
-    //  - all dispatched agents responded → early grade (skip waiting full window)
-    //  - stalled in "grading" → resume or close out the run, so a report pass
-    //    that died cannot leave the row polling forever
-    if ((row.status === "collecting" && row.windowClosesAt) || row.status === "grading") {
-      try {
-        const graded = await tryGradeIfReady(id);
-        if (graded) {
-          const [fresh] = await db.select().from(inquiries).where(eq(inquiries.id, id));
-          if (fresh) row = fresh;
-        }
-      } catch (err) {
-        console.error("poll grading trigger failed:", err);
-      }
-      if (!row) return null;
-    }
+    // Read-only poll. The orchestrator service advances the run on its own
+    // tick, so this never grades inside the request.
 
     return {
       id: row.id,
