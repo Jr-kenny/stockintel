@@ -70,10 +70,21 @@ export async function chatJsonOpenRouter(opts: {
       throw new Error(`openrouter ${res.status}: ${body.slice(0, 300)}`);
     }
     const payload = (await res.json()) as {
-      choices?: { message?: { content?: string } }[];
+      choices?: { message?: { content?: string }; finish_reason?: string }[];
     };
     const content = payload.choices?.[0]?.message?.content ?? "";
+    const finish = payload.choices?.[0]?.finish_reason;
     if (!content.trim()) throw new Error("openrouter returned empty content");
+    // Say WHY when the model stopped early. Without this a truncated response is
+    // reported as "non-JSON content", which points at the prompt or the parser
+    // when the actual cause is the output budget or a provider-side cut.
+    if (finish && finish !== "stop") {
+      const err = new Error(
+        `openrouter stopped early (finish_reason=${finish}) after ${content.length} chars — raise maxTokens or shorten the request`,
+      );
+      (err as { rawContent?: string }).rawContent = content;
+      throw err;
+    }
     const stripped = stripFences(content);
     const start = stripped.indexOf("{");
     const end = stripped.lastIndexOf("}");
