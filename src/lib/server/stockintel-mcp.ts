@@ -313,9 +313,11 @@ export function buildStockintelMcpServer(): McpServer {
       title: "Live investigation",
       description:
         "Run the full StockIntel grid on a question: ten specialists investigate in parallel, " +
-        "evidence clusters, and a thesis synthesizes with priced-or-not verdicts. Takes minutes. " +
-        "Returns an inquiry id immediately; poll stockintel_inquiry until complete. At most two " +
-        "outside runs at once; beyond that the grid answers busy. Read-only market data, no key needed.",
+        "evidence clusters, and a thesis synthesizes with priced-or-not verdicts. A full run takes " +
+        "about 7 minutes. Returns an inquiry id immediately; poll stockintel_inquiry every 30 seconds " +
+        "until status is complete, and never present stored reads as this run's result while it is " +
+        "still open. At most two outside runs at once; beyond that the grid answers busy. Read-only " +
+        "market data, no key needed.",
       inputSchema: {
         question: z
           .string()
@@ -329,7 +331,7 @@ export function buildStockintelMcpServer(): McpServer {
       const started = await agentInvestigate(question);
       const payload = started;
       const text = started.ok
-        ? `Investigation ${started.inquiryId} dispatched. Poll stockintel_inquiry every 30 seconds; sourcing runs about ${started.windowSeconds} seconds before grading.`
+        ? `Investigation ${started.inquiryId} dispatched. Poll stockintel_inquiry every 30 seconds until status is complete; a full run takes about 7 minutes, do not summarize before then.`
         : `Grid busy: ${started.error}`;
       return {
         content: [{ type: "text" as const, text }],
@@ -343,8 +345,9 @@ export function buildStockintelMcpServer(): McpServer {
     {
       title: "Investigation status",
       description:
-        "Poll a live investigation by inquiry id: status, progress counts, and the full thesis " +
-        "once complete. Triggers grading when the sourcing window closes.",
+        "Poll a live investigation by inquiry id: status, progress counts, wait discipline, and the " +
+        "full thesis once complete. Read-only poll, the run advances on its own. Keep polling every " +
+        "30 seconds until status is complete, about 7 minutes total.",
       inputSchema: {
         inquiry_id: z.string().min(3).describe("Inquiry id from stockintel_investigate."),
       },
@@ -380,7 +383,7 @@ export function buildStockintelMcpServer(): McpServer {
                 .join("\n")
           : s.status === "failed"
             ? `Investigation failed: ${s.error ?? "unknown error"}.`
-            : `${s.status}: ${s.progress.claimsReceived} claims from ${s.progress.agentsMatched} agents. Poll again shortly.`;
+            : `${s.status}: ${s.progress.claimsReceived} claims from ${s.progress.agentsMatched} agents, ${s.timing.elapsedSeconds}s elapsed of about 7 minutes. ${s.timing.note ?? "Poll again in 30 seconds."}`;
       return {
         content: [{ type: "text" as const, text }],
         structuredContent: s,

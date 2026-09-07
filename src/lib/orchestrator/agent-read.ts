@@ -283,6 +283,19 @@ export type InvestigationStatus = {
   windowSeconds: number;
   windowClosesAt: string | null;
   progress: { agentsMatched: number; claimsReceived: number; sourcesClustered: number };
+  /**
+   * Wait discipline for outside agents. An MCP server cannot push, so the
+   * poll itself says when to come back and how long the whole run takes.
+   * Agents that stop polling early and summarize from stored reads instead
+   * report a different run's answer as this run's, which is how a 4-minute
+   * give-up happens on a 7-minute run.
+   */
+  timing: {
+    elapsedSeconds: number;
+    nextPollInSeconds: number;
+    expectedTotalMinutes: number;
+    note: string | null;
+  };
   result: {
     question: string;
     preamble: string;
@@ -336,6 +349,20 @@ export async function agentInquiryStatus(inquiryId: string): Promise<Investigati
   await ensureSchema();
   const [row] = await db.select().from(inquiries).where(eq(inquiries.id, inquiryId));
   if (!row) return null;
+  const elapsedSeconds = Math.max(
+    0,
+    Math.round((Date.now() - Date.parse(row.createdAt)) / 1000),
+  );
+  const timingNote =
+    row.status === "complete"
+      ? "Done. Read result, do not poll again."
+      : row.status === "failed"
+        ? "Done with failure. Read error, do not poll again."
+        : row.status === "grading"
+          ? "Evidence is in and the analysis is being written. Poll again in 30 seconds. A full run takes about 7 minutes, do not summarize until status is complete."
+          : row.status === "collecting"
+            ? "Specialists are still searching. Poll again in 30 seconds. A full run takes about 7 minutes, do not summarize until status is complete."
+            : "Opening the investigation. Poll again in 30 seconds. A full run takes about 7 minutes, do not summarize until status is complete.";
   const result = row.status === "complete" ? resultFromRow(row) : null;
   return {
     inquiryId: row.id,
@@ -346,6 +373,12 @@ export async function agentInquiryStatus(inquiryId: string): Promise<Investigati
       agentsMatched: row.agentsMatched ?? 0,
       claimsReceived: row.claimsReceived ?? 0,
       sourcesClustered: row.sourcesClustered ?? 0,
+    },
+    timing: {
+      elapsedSeconds,
+      nextPollInSeconds: row.status === "complete" || row.status === "failed" ? 0 : 30,
+      expectedTotalMinutes: 7,
+      note: timingNote,
     },
     result,
     // A complete run with nothing to show has to say so. Runs recorded before
@@ -364,7 +397,15 @@ const MAX_CONCURRENT_EXTERNAL = 2;
 const EXTERNAL_WINDOW_MS = 20 * 60_000;
 
 export type InvestigationStart =
-  | { ok: true; inquiryId: string; windowSeconds: number }
+  | {
+      ok: true;
+      inquiryId: string;
+      windowSeconds: number;
+      /** Poll stockintel_inquiry this often until status is complete. */
+      pollEverySeconds: number;
+      /** A full run takes this long. Do not summarize before it completes. */
+      expectedMinutesTotal: number;
+    }
   | { ok: false; error: string };
 
 /**
@@ -399,7 +440,13 @@ export async function agentInvestigate(question: string): Promise<InvestigationS
   });
   // The orchestrator service on AWS owns dispatch. This returns as soon as
   // the row exists and the service picks it up on its next tick.
-  return { ok: true, inquiryId: id, windowSeconds: SOURCING_WINDOW_SECONDS };
+  return {
+    ok: true,
+    inquiryId: id,
+    windowSeconds: SOURCING_WINDOW_SECONDS,
+    pollEverySeconds: 30,
+    expectedMinutesTotal: 7,
+  };
 }
 
 export type HistoryResult = {
