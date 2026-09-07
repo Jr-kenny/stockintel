@@ -105,6 +105,12 @@ services by name. Unit names are agent names, not ports. Grid restarted on
   rechecks become beat-aimed queries capped at two. Canonical body lives in
   `web-research`, `sync-agent-body.ts` propagated to eight, `media-youtube`
   fixed separately.
+- Live proof 2026-09-06: `INQ-mtpk6l26p1mk` ran the full grid on prod, 10 agents,
+  30 claims, 38 clusters, complete with no error. Report carries 4 evidence, 3
+  multi-hop chains, 30/50/20 scenarios, invalidation, contradictions, pricedIn
+  priced at moderate confidence. The run exposed that stored reads skipped
+  report-only runs, fixed in `agent-read.ts` with report-first results plus a
+  cross-migration comparison, verified live on inquiry and assess.
 - Two-wave dispatch is live, observation gap closed by construction: wave one is a
   short open sweep, hypotheses form from wave-one returns plus tape plus memory,
   wave two is the aimed hunt. `observe.ts` stays as the cold-start fallback when
