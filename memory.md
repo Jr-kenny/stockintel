@@ -1,5 +1,23 @@
 # Memory
 
+## 2026-09-07 — One orchestrator on AWS, Vercel cut off the run path
+
+Cutover is done and pushed as 167655d. submitInquiry and agentInvestigate
+insert the row and return, both polls read the row only. Dispatch, wave
+advance, grade, connect and report belong to agents/orchestrator on the box.
+Vercel no longer imports run.ts, confirmed by zero hits for
+gradeAndSynthesize in the build output, so the old in-request path cannot
+run there. Only agents/orchestrator and local scripts import run.ts now.
+
+Why: Vercel kills at 300s, collection spends it all, the report pass needs
+around 7 minutes, so the report always died inside a request. The service
+ticks every 5s under lease, proven live on INQ-mtqom69wr3sj to complete with
+connect llm and report llm, 0 traceability issues, pricedIn priced.
+
+First poll may show dispatching with 0 agents before the service picks the
+row up. The UI already renders that as opening the investigation, so no
+change was needed there. tsc clean, build passes.
+
 ## 2026-09-06 — Report shipped end to end, OpenRouter leads
 
 Built the target architecture from the audit below. Four commits: fa72836, 3ccfa7c,
