@@ -4,6 +4,8 @@
 
 StockIntel is event-driven equity intelligence. You name a ticker and the network investigates the world behind it the buildouts, filings, capacity guides and contracts that move stocks before price reflects them then checks the market to see whether the thesis is priced in yet.
 
+**A full investigation takes about 7 minutes.** Ten specialists search in parallel, the system grades and connects what comes back, then writes one report. The screen shows progress throughout: opening the investigation, watching the tape, checking the evidence, readout ready. Good intelligence is worth the wait.
+
 ```mermaid
 flowchart LR
     T[Ticker under watch] --> H[Exposure hypotheses]
@@ -34,12 +36,13 @@ and investigates everything around the asset instead of the asset itself. It loo
 
 ## How we built it
 
-StockIntel is an intelligence network, not a screener. One orchestrator directs ten specialists. The system forms hypotheses before anyone searches, investigates in parallel, and synthesizes what comes back into one assessment per exposure.
+StockIntel is an intelligence network, not a screener. One orchestrator directs ten specialists. Each run opens with a broad sweep, forms exposure hypotheses from what the sweep returns, hunts those leads in an aimed second wave, and synthesizes everything into one report.
 
 ```mermaid
 flowchart LR
-    Q[Ticker] --> H[Exposure hypotheses]
-    H --> PI[Parallel investigation]
+    Q[Ticker] --> SW[Opening sweep]
+    SW --> H[Exposure hypotheses]
+    H --> PI[Aimed investigation]
     PI --> CS[Claims and sources]
     CS --> D[Deduplication]
     D --> V2[Verification]
@@ -66,7 +69,7 @@ A reasoning objective, not a checklist. Telling an agent "for NVDA, always check
 
 ### Exposure hypotheses
 
-Before any specialist searches, the orchestrator maps what could move the ticker: who buys from it, who supplies it, what infrastructure it rides on, where such events get reported. The system searches the circumstances that create exposure rather than the ticker itself.
+Each run opens with a short broad sweep with no hypotheses. The orchestrator then maps what could move the ticker from what the sweep actually returned: who buys from it, who supplies it, what infrastructure it rides on, where such events get reported. The aimed hunt that follows searches those circumstances rather than the ticker itself.
 
 ### Specialist agents
 
@@ -145,12 +148,12 @@ A note on voice: the live application speaks only in outcomes. Theses, evidence,
 
 Application and infrastructure:
 
-- SvelteKit
+- TanStack Start (React)
 - TypeScript
 - Vite
 - Bun
 - Vercel
-- Turso libSQL
+- libSQL
 - Drizzle ORM
 - Tailwind
 - Radix
@@ -172,10 +175,8 @@ Intelligence:
 Market layer:
 
 - Binance Agent OS MCP read-only market context (prices, volume, positions)
-- 0G Compute LLM grading of claim relevance and evidence quality
-- Base settlement and USDC payouts to contributing specialists
+- LLM grading of claim relevance and evidence quality, plus LLM connection of evidence into causal chains
 - ERC-7857 Agentic ID identity for participating specialists
-- Virtuals ACP v2 selling assessment readouts agent-to-agent
 - Sibyl memory intelligence that compounds across inquiries instead of restarting at zero
 
 ## Sibyl memory layer
@@ -198,7 +199,7 @@ It is tempting to let price action write the narrative. The pipeline enforces th
 
 ### Depth vs speed
 
-Ten specialists need time to investigate independently, but the product must stay practical. Parallel research and bounded recursion keep depth without open-ended cost.
+Ten specialists need time to investigate independently, but the product must stay practical. Parallel research and bounded recursion keep a full run to about 7 minutes: a short opening sweep, an aimed second wave of a few minutes, then grading, connection, and the report.
 
 ## What we learned
 
@@ -230,14 +231,14 @@ StockIntel runs end to end today:
 - Ten first-party specialists investigating in parallel
 - Structured claims with evidence and sources
 - Source clustering and deduplication
-- Deterministic grading and LLM grading through 0G Compute
+- Deterministic grading plus LLM grading of relevance and evidence quality
 - Bounded recursive follow-up investigation
-- Evidence and exposure graphs
-- Synthesis into one assessment per exposure guided by `soul.md`
+- Evidence and exposure graphs with persisted causal chains
+- One intelligence report per run: executive first, evidence with our read, synthesis chains, four horizons, scenarios with invalidation, bottom line
 - Read-only market context via Binance Agent OS MCP, persisted per inquiry
 - Positioning gauge feeding the market test; verdicts stay with the thesis
 - Outcome reflection (`bun scripts/reflect-outcomes.ts`): past verdicts judged against later price action, lessons written back to Sibyl memory
-- Base settlement, USDC payouts and ERC-7857 identities
+- ERC-7857 identities for participating specialists
 - Sibyl memory across inquiries
 
 Built for Track A of the Binance Agent OS Mini Hackathon.
