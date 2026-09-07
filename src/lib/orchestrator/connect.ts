@@ -246,11 +246,14 @@ export async function connectEvidence(params: {
     for (const temperature of [0.3, 0.6]) {
       try {
         const res = await fn({
+          // Same truncation trap as the report pass: the chains carry per-hop
+          // evidence ids, so a cut-off response loses the ids and reads as
+          // "no recognised evidence ids" rather than as an incomplete answer.
+          maxTokens: 10_000,
           system,
           user,
-          maxTokens: 4000,
           temperature,
-          timeoutMs: 90_000,
+          timeoutMs: 180_000,
         });
         const parsed = responseSchema.parse(parseJsonLoose(res.content));
         const evidence = parsed.evidence.filter((e) => knownIds.has(e.id));

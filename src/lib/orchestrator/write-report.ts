@@ -282,7 +282,14 @@ export async function writeReport(params: {
   for (const { fn, name } of jsonProviders()) {
     for (const temperature of [0.35, 0.6]) {
       try {
-        const res = await fn({ system, user, maxTokens: 4000, temperature, timeoutMs: 90_000 });
+        // A complete report measures ~24k characters, roughly 6k tokens. At the
+        // previous 4000-token ceiling the model was truncated mid-JSON on every
+        // attempt: the output was well-formed up to the cut, so it failed the
+        // closing-brace check and surfaced as "non-JSON content" or, once parsed
+        // loosely, as missing evidence ids. That looked like a prompt or parsing
+        // bug and was neither. Headroom is deliberate — an over-long report is
+        // cheap, a truncated one is worthless.
+        const res = await fn({ system, user, maxTokens: 12_000, temperature, timeoutMs: 180_000 });
         const written = partialSchema.parse(parseJsonLoose(res.content));
 
         // Code owns evidence, chains, market lines and priced-in. The model

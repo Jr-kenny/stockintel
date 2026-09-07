@@ -303,6 +303,9 @@ export async function ensureSchema() {
     "ALTER TABLE settlements ADD COLUMN payout_error TEXT",
     "ALTER TABLE supply_records ADD COLUMN identity TEXT",
     "ALTER TABLE inquiries ADD COLUMN market_json TEXT",
+    // Single-owner leases: see inquiries.leaseOwner in schema.ts
+    "ALTER TABLE inquiries ADD COLUMN lease_owner TEXT",
+    "ALTER TABLE inquiries ADD COLUMN lease_expires_at TEXT",
   ];
   for (const statement of alters) {
     try {

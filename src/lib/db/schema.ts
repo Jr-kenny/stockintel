@@ -61,6 +61,17 @@ export const inquiries = sqliteTable("inquiries", {
   reportMode: text("report_mode"),
   /** Persisted Binance snapshot taken at synthesis time (for outcome reflection). */
   marketJson: text("market_json"),
+  /**
+   * Which worker currently owns this run, and until when.
+   *
+   * One orchestrator owns a run end to end. The lease is what enforces that
+   * rather than trusting deployment discipline: a worker takes a row only by
+   * winning a conditional UPDATE, so two processes cannot both dispatch or both
+   * grade the same inquiry. The expiry means a worker that dies mid-run releases
+   * its claim instead of stranding the row forever.
+   */
+  leaseOwner: text("lease_owner"),
+  leaseExpiresAt: text("lease_expires_at"),
   error: text("error"),
   dispatchedAt: text("dispatched_at"),
   windowClosesAt: text("window_closes_at"),
