@@ -63,7 +63,17 @@ const STOPWORDS = new Set(
     "or our sell selling show that the their them they this to us want was we what which who " +
     "will with you your become becoming likely need needs companies company business businesses " +
     "give tell looking show showing evidence real some just about across between more most new " +
-    "can could should would were than then when where while who's let's"
+    "can could should would were than then when where while who's let's " +
+    // Framing verbs: an instruction to the grid, never the subject of the search.
+    // "Watch NVDA: ..." used to make "watch" the leading EDGAR full-text topic.
+    "watch watching monitor monitoring track tracking follow following " +
+    // Generic analytical filler. EDGAR takes only the first two topic words, so
+    // one of these in slot two spends a primary-source lookup on noise, and the
+    // relevance gate is a substring match that waves through anything containing
+    // "change" or "value". Subject-bearing terms (export, supply, controls) stay.
+    "happening happen happens materially material world worldwide value values " +
+    "change changes changing matter matters currently anything something everything " +
+    "latest update updates thing things going really actually"
   ).split(" "),
 );
 
