@@ -18,6 +18,16 @@ First poll may show dispatching with 0 agents before the service picks the
 row up. The UI already renders that as opening the investigation, so no
 change was needed there. tsc clean, build passes.
 
+Live proof on a TSLA run submitted through Vercel after deploy,
+INQ-mtqpbkyepz6n. Vercel inserted the row and never touched it again. The
+box dispatched at 03:49, early-advanced wave one on all 10 answers, opened
+wave two from 5 hypotheses, early-graded wave two on all 10 answers,
+30 claims. Connect llm with 8 events and 4 chains, 23 entities and 13 edges
+persisted. Report took two OpenRouter misses then Zen wrote it, 0
+traceability issues, pricedIn priced. Complete at 03:56 with the full
+document served from the poll. No web request lived longer than seconds
+across a 7 minute run, which is the entire point of the cutover.
+
 ## 2026-09-06 — Report shipped end to end, OpenRouter leads
 
 Built the target architecture from the audit below. Four commits: fa72836, 3ccfa7c,
