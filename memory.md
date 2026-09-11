@@ -1,5 +1,24 @@
 # Memory
 
+## 2026-09-11 — 0G leads the thesis chain with multi-key fallback
+
+0G is now the lead provider in `src/lib/llm/providers.ts`, OpenRouter behind
+it, Zen last. `compute-router.ts` reads every key in order: the
+comma-separated `ZERO_G_COMPUTE_API_KEYS` list plus `ZERO_G_COMPUTE_API_KEY`
+and `_2` through `_9` suffixes. Only key-level rejections (401/402/403,
+insufficient, balance, quota) roll to the next key, so a bad request never
+burns every key at once. Verified live: chain resolves to 0G first, rotation
+test passes on injected 402, real ping through the refactored client returned
+clean JSON. OpenRouter default flipped to
+`nvidia/nemotron-3-super-120b-a12b:free` since minimax-m3:free and glm-5.2:free
+went paid (404). Nemotron answers pings in 10s but invents its own shape on
+the connect contract, so it stays a free fallback, not the lead. Three keys
+wired and verified live: primary sk-41dd plus sk-20389b and sk-3c1990 as _2
+and _3, each answered a ping. Note glm-5
+returned empty once and truncated fenced JSON once during the checks while
+the deepseek-v4-flash fallback answered clean, so the flaky-deployment path
+still earns its keep.
+
 ## 2026-09-07 — One orchestrator on AWS, Vercel cut off the run path
 
 Cutover is done and pushed as 167655d. submitInquiry and agentInvestigate

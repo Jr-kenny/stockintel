@@ -1,16 +1,20 @@
 /**
  * Provider order for every LLM pass in the orchestrator.
  *
- * OpenRouter leads. 0G Compute Router is the fallback, not the primary: on the
- * deeper schemas (connect, report) it returned empty content and fenced JSON
- * often enough to cost a run, and a free OpenRouter model does the same work
- * more reliably. Zen sits last as a third option when a key is present.
+ * 0G Compute Router leads. OpenRouter sits behind it as the free fallback,
+ * Zen last as a third option when a key is present.
  *
- * Default model is minimax/minimax-m3:free, chosen by probing the real connect
- * contract with a 7-event payload: 2/2 clean parses, 26-32s, ~2400 completion
- * tokens against a 4000 cap, and every chain joined two or more events.
- * nemotron-3-super passed once then truncated at the cap; glm-5.2 and gemma-4
- * were rate limited; deepseek-r1 and qwen3-coder are no longer free.
+ * 0G leads because it follows the deep schemas (connect, report) more
+ * closely than the free OpenRouter options probed so far, and because its
+ * spend is on keys we control directly. OpenRouter's free default went paid
+ * (minimax-m3:free 404), nemotron-3-super answers but invents its own shape,
+ * glm-5.2 and gemma-4 were rate limited.
+ *
+ * 0G rolls across every configured key before the chain moves on: primary
+ * ZERO_G_COMPUTE_API_KEY, then _2, _3 and the rest, or a comma-separated
+ * ZERO_G_COMPUTE_API_KEYS list. Only key-level rejections (auth, payment,
+ * quota) roll to the next key. Anything else throws straight through so a
+ * bad request never burns every key at once.
  *
  * One place to change this, so the passes cannot drift apart.
  */
@@ -30,19 +34,18 @@ export type JsonCaller = (opts: {
 export type ProviderOption = { fn: JsonCaller; name: string };
 
 /**
- * Providers in the order they should be tried. OpenRouter first when a key is
- * configured, then 0G, then Zen.
+ * Providers in the order they should be tried. 0G first when a key is
+ * configured, then OpenRouter, then Zen.
  *
- * 0G is always included even without an explicit check: computeRouterConfig
- * gates itself and throws a clear error when unset, and keeping it in the chain
- * means a run still completes if OpenRouter is rate limited.
+ * 0G throws a clear error when unset, so with no key the chain simply starts
+ * at OpenRouter instead of failing the run.
  */
 export function jsonProviders(): ProviderOption[] {
   const order: ProviderOption[] = [];
+  order.push({ fn: chatJson, name: "0G" });
   if (openRouterConfig().live) {
     order.push({ fn: chatJsonOpenRouter, name: `openrouter:${openRouterConfig().model}` });
   }
-  order.push({ fn: chatJson, name: "0G" });
   if (zenConfig().live) order.push({ fn: chatJsonZen, name: "zen" });
   return order;
 }

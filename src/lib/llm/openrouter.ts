@@ -1,10 +1,10 @@
 /**
  * OpenRouter thesis provider. Set OPENROUTER_API_KEY to enable.
- * Default is minimax-m3:free, verified live writing our thesis JSON with
- * verdicts plus market calls. Override with OPENROUTER_MODEL.
- * Other free candidates: z-ai/glm-5.2:free,
- * nvidia/nemotron-3-super-120b-a12b:free, google/gemma-4-31b-it:free,
+ * Default is nvidia/nemotron-3-super-120b-a12b:free, the free option that
+ * still answers. Override with OPENROUTER_MODEL.
+ * Other free candidates: google/gemma-4-31b-it:free,
  * minimax/minimax-m2.7:free.
+ * Retired: minimax/minimax-m3:free and z-ai/glm-5.2:free went paid (404).
  */
 
 export type OpenRouterResult = {
@@ -22,7 +22,7 @@ export function openRouterConfig(): { live: boolean; apiKey: string; model: stri
   const model =
     readEnv("OPENROUTER_MODEL") ??
     readEnv("PRIME_GRADE_MODEL") ??
-    "minimax/minimax-m3:free";
+    "nvidia/nemotron-3-super-120b-a12b:free";
   return { live: apiKey.length > 0, apiKey, model };
 }
 
