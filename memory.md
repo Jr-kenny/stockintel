@@ -19,6 +19,12 @@ returned empty once and truncated fenced JSON once during the checks while
 the deepseek-v4-flash fallback answered clean, so the flaky-deployment path
 still earns its keep.
 
+Deployed to AWS as fb67700: three 0G keys plus ZERO_G_NETWORK=mainnet and
+the mainnet router URL appended to /etc/stockintel/orchestrator.env (the box
+had no 0G keys at all, so every prior run there graded without 0G), pulled,
+restarted all ten units plus orchestrator, all active. Box probe confirms
+0G lead, 3 keys, live ping clean.
+
 ## 2026-09-07 — One orchestrator on AWS, Vercel cut off the run path
 
 Cutover is done and pushed as 167655d. submitInquiry and agentInvestigate
