@@ -25,6 +25,16 @@ had no 0G keys at all, so every prior run there graded without 0G), pulled,
 restarted all ten units plus orchestrator, all active. Box probe confirms
 0G lead, 3 keys, live ping clean.
 
+First live run on the new chain (INQ-mtwdjas0cmcm, NVDA, complete in ~20m):
+35 wave-one claims, 86 total capped to 30, full report with 0 traceability
+issues. Every fallback fired at least once: 0G t=0.3 aborted and t=0.6
+truncated on connect, Nemotron wrote connect instead (5 events, 2 chains),
+primary 0G key hit 402 mid-run and rotation moved to key 2, which wrote the
+report clean. Thesis: DOJ probe over the $20B Groq licensing deal vs an $18B
+coordinated investment offensive, priced, moderate confidence. Lesson: 0G
+glm-5 is flaky on 10k-token outputs under load, the chain depth is what
+saved the run, not any single provider.
+
 ## 2026-09-07 — One orchestrator on AWS, Vercel cut off the run path
 
 Cutover is done and pushed as 167655d. submitInquiry and agentInvestigate
