@@ -1,5 +1,13 @@
 # Memory
 
+## 2026-09-13 — AWS verified in sync with luna chain, no push needed
+
+Local clean at 053bc6f and in sync with origin, nothing to push. Box
+checked over SSM: same commit 053bc6f, same four keys by suffix match,
+model unset so code default gpt-5.6-luna leads with glm-5.3-flash behind
+it, all eleven units active with orchestrator restarted after the commit.
+No pull or restart ran since state already matched.
+
 ## 2026-09-13 — Luna lineup clocks 5.1 minutes end to end
 
 Full local run INQ-mtzh630ugsws on the luna chain: wave one 45s with 45
