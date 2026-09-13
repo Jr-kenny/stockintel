@@ -1,5 +1,16 @@
 # Memory
 
+## 2026-09-13 — Luna lineup clocks 5.1 minutes end to end
+
+Full local run INQ-mtzh630ugsws on the luna chain: wave one 45s with 45
+claims and 5 LLM hypotheses, wave two early exit with 86 claims capped to 30,
+complete in 5.1 minutes with connect llm, report llm, 9 events, 4 chains,
+moderate confidence, ticker NVDA. Every LLM pass landed without touching a
+fallback, which is the whole difference: no empty output, no timeouts, no
+retry cascades. Down from 16 to 20 minutes across the earlier runs. Local is
+proven. AWS is next: same four keys into orchestrator.env plus pull and
+restart. Test rig cleaned up.
+
 ## 2026-09-13 — Luna leads the 0G chain, glm-5 gone
 
 User supplied three model IDs, all probed 200 live: gpt-5.6-luna answers
