@@ -1,5 +1,15 @@
 # Memory
 
+## 2026-09-13 — Dead 0G primary pulled from rotation
+
+Probed all three router keys directly: key 1 (...a207) returns 402
+insufficient balance on every call, keys 2 and 3 answer 200. Local .env now
+runs key 2 as primary with key 3 behind it, old primary commented out until
+refilled, both verified with a live ping. Same reorder still needed in
+/etc/stockintel/orchestrator.env on the AWS box before judging. Note the 402
+itself was never the big cost, rotation skips it in one fast round trip, the
+minutes went to glm-5 empty output and 90s timeouts on the live keys.
+
 ## 2026-09-13 — Live timing test of the fast defaults
 
 Ran the full grid locally (web on 8081, all ten agents, INQ-mtz9qy2cv57y):
