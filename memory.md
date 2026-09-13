@@ -1,5 +1,13 @@
 # Memory
 
+## 2026-09-13 — Depleted key fully removed, four funded keys live
+
+The ...a207 key was the old depleted one the user had asked to remove in an
+earlier session but it survived as primary. It is now deleted from .env, not
+just commented. User pasted four funded keys, all wired as primary plus _2
+through _4 and each probed 200 through computeRouterKeys. AWS box still needs
+the same four keys in /etc/stockintel/orchestrator.env before judging.
+
 ## 2026-09-13 — Dead 0G primary pulled from rotation
 
 Probed all three router keys directly: key 1 (...a207) returns 402
