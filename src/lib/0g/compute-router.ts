@@ -30,10 +30,10 @@ const ROUTER_BASE_URLS: Record<ZeroGNetwork, string> = {
 };
 
 /** Catalog IDs verified live against the router. Override with ZERO_G_COMPUTE_MODEL. */
-const DEFAULT_MODEL = "glm-5";
+const DEFAULT_MODEL = "deepseek-v4-flash";
 
 /** Second chance when the primary deployment returns empty content. */
-const FALLBACK_MODEL = "deepseek-v4-flash";
+const FALLBACK_MODEL = "glm-5";
 
 function readEnv(name: string): string | undefined {
   const value = process.env[name];

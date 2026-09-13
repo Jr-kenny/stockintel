@@ -1,5 +1,20 @@
 # Memory
 
+## 2026-09-13 — Deepseek default tried, mixed result
+
+Per user direction: 0G default model is now deepseek-v4-flash with glm-5 as
+the fallback, Zen cut from the provider chain in code and its key commented
+out of .env. Chain probes as [0G, OpenRouter] and deepseek answers a small
+JSON prompt clean in 4s. Full local run INQ-mtzg3wdlnn6m completed in
+13.8 minutes with 24 events, 3 chains, moderate confidence, report written by
+OpenRouter. But deepseek returned empty content on every medium prompt (all
+grade chunks, hypotheses) and timed out on the big generations (connect,
+report), so most passes fell back anyway. Honest read: deepseek is fast on
+small prompts and slow or empty on big ones, glm-5 is the reverse. Neither
+model choice fixes the wall. Next candidate: shrink grade chunks from 20 to
+10 claims so prompts stay in the range both models handle. Test rig cleaned
+up. AWS still untouched.
+
 ## 2026-09-13 — Four-key local run completes in 16.1m, providers are the wall
 
 Full local grid on the four funded keys, INQ-mtzb7usa5vtc: wave one 45s with
