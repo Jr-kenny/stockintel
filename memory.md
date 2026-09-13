@@ -1,6 +1,13 @@
 # Memory
 
-## 2026-09-13 — AWS verified in sync with luna chain, no push needed
+## 2026-09-13 — Production luna run completes in about 3 minutes
+
+Live MCP-triggered run INQ-mtzirt3uz58u on the AWS box: dispatched 07:55:48,
+wave one closed with 43 claims and 4 hypotheses, wave two early graded with
+all 10 agents answering, connect llm with 8 events and 4 chains, report llm
+with priced and 0 traceability issues, complete 07:58:47. About 3 minutes end
+to end with zero fallbacks in the log. Production now serves this report on
+assess. Local 5.1 minute result stands alongside it.
 
 Local clean at 053bc6f and in sync with origin, nothing to push. Box
 checked over SSM: same commit 053bc6f, same four keys by suffix match,
