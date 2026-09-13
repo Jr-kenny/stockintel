@@ -1,6 +1,12 @@
 # Memory
 
-## 2026-09-13 — Production luna run completes in about 3 minutes
+## 2026-09-13 — mrcopy brain switched to luna
+
+Per user request: /opt/mrcopy/.env moved from OpenRouter nemotron free to
+the 0G router with gpt-5.6-luna, reusing the primary stockintel 0G key.
+Backup at .env.bak-before-luna. Container restarted, health ok with brain
+true. Live router probe on its key answered http 200 in about 3s with
+content present.
 
 Live MCP-triggered run INQ-mtzirt3uz58u on the AWS box: dispatched 07:55:48,
 wave one closed with 43 claims and 4 hypotheses, wave two early graded with
