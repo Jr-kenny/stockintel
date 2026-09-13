@@ -38,22 +38,25 @@ import { runFollowUpRounds } from "./recurse";
 
 /**
  * Sourcing window: how long the grid stays open for claims after dispatch.
- * Default 5 minutes for quick cycles; set PRIME_SOURCING_WINDOW_SECONDS up to
- * 3600 (1 hour) when deep research is worth waiting for. The readout is
- * anchored on Base either way, so clients always get a verifiable commitment.
+ * Default 150s for a judge-safe cycle (was 300s, which pushed full runs past
+ * 20 minutes with wave one plus follow-ups plus LLM retries). Set
+ * PRIME_SOURCING_WINDOW_SECONDS up to 3600 (1 hour) when deep research is
+ * worth waiting for. The readout is anchored on Base either way, so clients
+ * always get a verifiable commitment.
  */
 export const SOURCING_WINDOW_SECONDS = Math.min(
   3600,
-  Math.max(60, Number(process.env["PRIME_SOURCING_WINDOW_SECONDS"] ?? 300)),
+  Math.max(60, Number(process.env["PRIME_SOURCING_WINDOW_SECONDS"] ?? 150)),
 );
 
 /**
  * Wave-one window: short broad sweep with no hypotheses. Its job is direction,
- * not completion. Wave two gets the full sourcing window for the aimed hunt.
+ * not completion. Wave two gets the sourcing window for the aimed hunt.
+ * Default 45s (was 90s) so the two-wave total stays under ~3.5 minutes.
  */
 export const WAVE1_WINDOW_SECONDS = Math.min(
   600,
-  Math.max(30, Number(process.env["PRIME_WAVE1_WINDOW_SECONDS"] ?? 90)),
+  Math.max(30, Number(process.env["PRIME_WAVE1_WINDOW_SECONDS"] ?? 45)),
 );
 
 // Controlled research graph traversal budgets (per §6)

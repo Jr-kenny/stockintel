@@ -13,8 +13,18 @@ import { planFollowUps } from "./plan-followups";
 import type { ResearchCommand } from "./run";
 import { MAX_DEPTH, MAX_SOURCES, TOKEN_BUDGET, SOURCING_WINDOW_SECONDS } from "./run";
 
-const FOLLOWUP_WINDOW_SECONDS = Math.min(60, Math.max(30, Number(process.env["PRIME_FOLLOWUP_WINDOW_SECONDS"] ?? 40)));
+const FOLLOWUP_WINDOW_SECONDS = Math.min(60, Math.max(15, Number(process.env["PRIME_FOLLOWUP_WINDOW_SECONDS"] ?? 25)));
 const FOLLOWUP_SLEEP_MS = FOLLOWUP_WINDOW_SECONDS * 1000 + 2000; // dispatch time + buffer
+
+/**
+ * Max follow-up rounds per grading call. Default 1 (was 2): the second round
+ * rarely added independent sources and cost another ~45s plus planning LLM
+ * time. Set PRIME_MAX_FOLLOWUP_ROUNDS=2 to restore the deep path.
+ */
+const MAX_FOLLOWUP_ROUNDS = Math.min(
+  2,
+  Math.max(0, Number(process.env["PRIME_MAX_FOLLOWUP_ROUNDS"] ?? 1)),
+);
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
@@ -242,9 +252,10 @@ export async function runFollowUpRounds(params: {
       break;
     }
 
-    // Cap: don't loop forever in one grading call; max 2 follow-up rounds per cycle
-    if (roundsRun >= 2) {
-      console.log("[recurse] max follow-up rounds reached (2)");
+    // Cap: don't loop forever in one grading call; default is 1 follow-up
+    // round (see MAX_FOLLOWUP_ROUNDS above).
+    if (roundsRun >= MAX_FOLLOWUP_ROUNDS) {
+      console.log(`[recurse] max follow-up rounds reached (${MAX_FOLLOWUP_ROUNDS})`);
       break;
     }
   }

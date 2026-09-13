@@ -280,7 +280,10 @@ export async function writeReport(params: {
   const knownIds = new Set(connection.evidence.map((e) => e.id));
 
   for (const { fn, name } of jsonProviders()) {
-    for (const temperature of [0.35, 0.6]) {
+    // Single temperature per provider, 90s cap. Same reasoning as connect.ts:
+    // the old 6 x 180s worst case could stall a run for 18 minutes on this
+    // pass alone.
+    for (const temperature of [0.35]) {
       try {
         // A complete report measures ~24k characters, roughly 6k tokens. At the
         // previous 4000-token ceiling the model was truncated mid-JSON on every
@@ -289,7 +292,7 @@ export async function writeReport(params: {
         // loosely, as missing evidence ids. That looked like a prompt or parsing
         // bug and was neither. Headroom is deliberate — an over-long report is
         // cheap, a truncated one is worthless.
-        const res = await fn({ system, user, maxTokens: 12_000, temperature, timeoutMs: 180_000 });
+        const res = await fn({ system, user, maxTokens: 12_000, temperature, timeoutMs: 90_000 });
         const written = partialSchema.parse(parseJsonLoose(res.content));
 
         // Code owns evidence, chains, market lines and priced-in. The model

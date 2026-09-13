@@ -185,16 +185,18 @@ export async function generateHypotheses(
   const user = observation?.trim()
     ? `Objective: ${question.slice(0, 600)}\n\nOBSERVED BEFORE HYPOTHESIZING (ground every hypothesis in this, never invent events):\n${observation.slice(0, 3000)}`
     : `Objective: ${question.slice(0, 600)}\n\nNo observation was captured before this call. Hypothesize from the question text alone and keep each hypothesis testable rather than asserting facts.`;
-  // Every provider, twice each. Hypotheses shape the whole run, so it is worth
-  // exhausting the chain before falling back to the deterministic templates.
+  // One attempt per provider at 45s. Hypotheses shape the run, but the old
+  // double-attempt loop (2 x 90s per provider) could stall wave-two dispatch
+  // for minutes, and the deterministic fallback still produces a usable hunt.
   for (const { fn, name } of providers) {
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 1; attempt++) {
       try {
         const { content } = await fn({
           system,
           user,
           maxTokens: 4000,
           temperature: attempt === 0 ? 0.4 : 0.6,
+          timeoutMs: 45_000,
         });
         const start = content.indexOf("{");
         const end = content.lastIndexOf("}");

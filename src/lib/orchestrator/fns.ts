@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { db, ensureSchema, nowIso, newId } from "@/lib/db";
-import { inquiries, agents, supplyRecords, accounts } from "@/lib/db/schema";
+import { inquiries, agents, supplyRecords, accounts, claims, dispatchAcks } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { reportSchema, type IntelligenceReport } from "@/lib/orchestrator/report";
 
@@ -12,7 +12,7 @@ import { reportSchema, type IntelligenceReport } from "@/lib/orchestrator/report
  */
 const SOURCING_WINDOW_SECONDS = Math.min(
   3600,
-  Math.max(60, Number(process.env["PRIME_SOURCING_WINDOW_SECONDS"] ?? 300)),
+  Math.max(60, Number(process.env["PRIME_SOURCING_WINDOW_SECONDS"] ?? 150)),
 );
 
 export type { IntelligenceReport };
@@ -139,6 +139,35 @@ export const getInquiry = createServerFn({ method: "POST" })
     // Read-only poll. The orchestrator service advances the run on its own
     // tick, so this never grades inside the request.
 
+    // Live progress for collecting runs: the stored claimsReceived only lands
+    // at grading time, which left judges staring at 0 claims for minutes.
+    // Count live rows instead so the UI can show evidence arriving.
+    let liveClaims: number | null = null;
+    let liveAgents: number | null = null;
+    let wave: 1 | 2 | null = null;
+    if (row.status === "collecting" || row.status === "dispatching") {
+      try {
+        const raw = typeof row.investigationJson === "string"
+          ? JSON.parse(row.investigationJson)
+          : row.investigationJson;
+        if (raw?.wave === 1) wave = 1;
+        else if (raw?.wave === 2) wave = 2;
+      } catch {}
+      try {
+        const [claimRows, ackRows] = await Promise.all([
+          db.select({ agentId: claims.agentId }).from(claims).where(eq(claims.inquiryId, id)),
+          db.select({ agentId: dispatchAcks.agentId }).from(dispatchAcks).where(eq(dispatchAcks.inquiryId, id)),
+        ]);
+        liveClaims = claimRows.length;
+        liveAgents = new Set([...claimRows.map((r) => r.agentId), ...ackRows.map((a) => a.agentId)]).size;
+      } catch {}
+    }
+    const elapsedSeconds = row.dispatchedAt
+      ? Math.max(0, Math.round((Date.now() - Date.parse(row.dispatchedAt)) / 1000))
+      : row.createdAt
+        ? Math.max(0, Math.round((Date.now() - Date.parse(row.createdAt)) / 1000))
+        : null;
+
     return {
       id: row.id,
       question: row.question,
@@ -148,6 +177,10 @@ export const getInquiry = createServerFn({ method: "POST" })
       agentsMatched: row.agentsMatched,
       claimsReceived: row.claimsReceived,
       sourcesClustered: row.sourcesClustered,
+      liveClaims,
+      liveAgents,
+      wave,
+      elapsedSeconds,
       readout: row.readoutJson ? readoutSchema.parse(JSON.parse(row.readoutJson)) : null,
       /**
        * The intelligence report. Null on runs from before the report pass, so

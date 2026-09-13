@@ -243,7 +243,10 @@ export async function connectEvidence(params: {
   const knownIds = new Set(index.keys());
 
   for (const { fn, name } of jsonProviders()) {
-    for (const temperature of [0.3, 0.6]) {
+    // Single temperature per provider. The old t=0.3 then t=0.6 retry doubled
+    // worst-case latency (6 x 180s) and the second attempt rarely saved a run
+    // the first could not parse. Fail fast to the next provider instead.
+    for (const temperature of [0.3]) {
       try {
         const res = await fn({
           // Same truncation trap as the report pass: the chains carry per-hop
@@ -253,7 +256,7 @@ export async function connectEvidence(params: {
           system,
           user,
           temperature,
-          timeoutMs: 180_000,
+          timeoutMs: 90_000,
         });
         const parsed = responseSchema.parse(parseJsonLoose(res.content));
         const evidence = parsed.evidence.filter((e) => knownIds.has(e.id));

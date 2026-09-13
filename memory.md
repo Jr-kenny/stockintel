@@ -1,5 +1,21 @@
 # Memory
 
+## 2026-09-13 — Judge-safe run time, 20m to about 5m
+
+Wait was wave one 90s plus wave two 300s plus up to two follow-up rounds
+plus LLM retries at two temperatures with 180s timeouts. Worst case the
+connect and report passes alone could stall 18 minutes each. New defaults:
+wave one 45s, wave two 150s, follow-ups capped at one round of 25s
+(`PRIME_MAX_FOLLOWUP_ROUNDS=2` restores deep mode), single temperature per
+provider with 90s caps on connect and report, 45s on grade and hypotheses,
+30s on follow-up planning. Agents fetch Google News in parallel and hit
+GDELT on the first two queries only instead of serially sleeping 5.2s per
+query, synced from web-research to all eight clones. Poll now returns live
+claims, live agents, wave, and elapsed seconds during collecting, and the UI
+shows wave 1 of 2 versus 2 of 2 with live counts plus grading progress. Copy
+updated from about 5 minutes to about 2 to 3 minutes. tsc clean, build
+passes in 2s.
+
 ## 2026-09-11 — 0G leads the thesis chain with multi-key fallback
 
 0G is now the lead provider in `src/lib/llm/providers.ts`, OpenRouter behind

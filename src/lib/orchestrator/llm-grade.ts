@@ -162,6 +162,7 @@ export async function llmGradeClaims(
           user: buildUserPrompt(question, slice, offset),
           maxTokens: 2000,
           temperature: 0,
+          timeoutMs: 45_000,
         });
         verdicts.push(...parseVerdicts(result.content, slice.length, offset));
         const cost = (result as { costOg?: number }).costOg;

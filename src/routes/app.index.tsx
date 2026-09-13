@@ -689,10 +689,30 @@ function Intelligence() {
                     <h3 className="mt-2 font-display text-xl">Your watch is live. Give us a moment.</h3>
                     <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
                       Your watch is live across every surface. An in-depth investigation
-                      typically takes about 5 minutes: sourcing, then clustering, then
+                      typically takes about 2 to 3 minutes: sourcing, then clustering, then
                       grading, then your readout. Patience here is part of the product.
                       The readout appears the moment grading finishes.
                     </p>
+                    {inquiry?.status === "collecting" && (
+                      <p className="mt-3 font-mono text-xs text-signal" aria-live="polite">
+                        {inquiry.wave === 1
+                          ? `Wave 1 of 2 · broad sweep${inquiry.liveClaims != null ? ` · ${inquiry.liveClaims} claims in` : ""}${inquiry.liveAgents != null && inquiry.agentsMatched ? ` · ${inquiry.liveAgents}/${inquiry.agentsMatched} agents back` : ""}`
+                          : inquiry.wave === 2
+                            ? `Wave 2 of 2 · aimed hunt${inquiry.liveClaims != null ? ` · ${inquiry.liveClaims} claims in` : ""}${inquiry.liveAgents != null && inquiry.agentsMatched ? ` · ${inquiry.liveAgents}/${inquiry.agentsMatched} agents back` : ""}`
+                            : inquiry.liveClaims != null
+                              ? `${inquiry.liveClaims} claims in so far`
+                              : null}
+                        {inquiry.elapsedSeconds != null && inquiry.elapsedSeconds > 5
+                          ? ` · ${Math.floor(inquiry.elapsedSeconds / 60)}m ${inquiry.elapsedSeconds % 60}s elapsed`
+                          : null}
+                      </p>
+                    )}
+                    {inquiry?.status === "grading" && (
+                      <p className="mt-3 font-mono text-xs text-signal" aria-live="polite">
+                        Grading {inquiry.claimsReceived ?? inquiry.liveClaims ?? 0} claims · connecting evidence · writing your report
+                        {inquiry.elapsedSeconds != null ? ` · ${Math.floor(inquiry.elapsedSeconds / 60)}m ${inquiry.elapsedSeconds % 60}s in` : null}
+                      </p>
+                    )}
                     <div className="mt-5 border-t border-border pt-4">
                       <p className="label-mono text-muted-foreground">While you wait</p>
                       <RotatingFacts />
@@ -703,9 +723,9 @@ function Intelligence() {
                   </div>
                   <SourcingCountdown
                     deadlineIso={inquiry?.windowClosesAt ?? null}
-                    windowSeconds={inquiry?.windowSeconds ?? 300}
+                    windowSeconds={inquiry?.windowSeconds ?? 150}
                     grading={inquiry?.status === "grading"}
-                    claims={inquiry?.claimsReceived ?? 0}
+                    claims={inquiry?.claimsReceived ?? inquiry?.liveClaims ?? 0}
                     sources={inquiry?.sourcesClustered ?? 0}
                   />
                 </div>
@@ -759,7 +779,7 @@ function buildSteps(inquiry: InquiryState | null): LiveStep[] {
       label: "Fanning out",
       state: reached("collecting") ? "done" : reached("dispatching") ? "active" : "idle",
       lines: [
-        `Sourcing window · ${inquiry?.windowSeconds ?? 300}s`,
+        `Sourcing window · ${inquiry?.windowSeconds ?? 150}s${inquiry?.wave ? ` · wave ${inquiry.wave}/2` : ""}`,
         "Every surface around the ticker is investigated at once",
       ],
     },
@@ -767,7 +787,7 @@ function buildSteps(inquiry: InquiryState | null): LiveStep[] {
       label: "Evidence in",
       state: reached("grading") ? "done" : reached("collecting") ? "active" : "idle",
       lines: [
-        `${inquiry?.claimsReceived ?? 0} claims submitted`,
+        `${inquiry?.claimsReceived ?? inquiry?.liveClaims ?? 0} claims submitted${inquiry?.liveAgents != null && inquiry?.agentsMatched ? ` · ${inquiry.liveAgents}/${inquiry.agentsMatched} agents` : ""}`,
         `${inquiry?.sourcesClustered ?? 0} independent source clusters`,
       ],
     },

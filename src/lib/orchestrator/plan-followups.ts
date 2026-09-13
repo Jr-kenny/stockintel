@@ -184,9 +184,11 @@ export async function planFollowUps(params: {
   const user = buildInput(question, graded, state, contradictions);
   const system = await guidedSystem(CONTRACT);
   for (const { fn, name } of jsonProviders()) {
-    for (const temperature of [0.3, 0.6]) {
+    // Single temperature, 30s cap. Planning is a small JSON call; waiting a
+    // full minute per provider here stalls the follow-up window it plans for.
+    for (const temperature of [0.3]) {
       try {
-        const res = await fn({ system, user, maxTokens: 2000, temperature, timeoutMs: 60_000 });
+        const res = await fn({ system, user, maxTokens: 2000, temperature, timeoutMs: 30_000 });
         const parsed = responseSchema.parse(parseJsonLoose(res.content));
         const cleaned = cleanTasks(parsed.tasks);
         if (cleaned.length >= 2) {

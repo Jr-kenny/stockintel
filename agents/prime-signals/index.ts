@@ -709,15 +709,21 @@ async function researchAndSubmit(command: ResearchCommand) {
     );
 
     const signals: RawSignal[] = [];
-    for (const q of queries) {
-      if (BEAT.googleNews) {
-        try {
-          signals.push(...(await fetchGoogleNews(q)));
-        } catch (err) {
-          console.warn("  google news failed:", err instanceof Error ? err.message : err);
-        }
+    // Google News in parallel: the old serial loop waited out every 12s
+    // timeout back to back, so 6 queries could stall an agent past the
+    // wave-one window on its own.
+    if (BEAT.googleNews) {
+      const newsResults = await Promise.allSettled(queries.map((q) => fetchGoogleNews(q)));
+      for (const r of newsResults) {
+        if (r.status === "fulfilled") signals.push(...r.value);
+        else console.warn("  google news failed:", r.reason instanceof Error ? r.reason.message : r.reason);
       }
-      if (BEAT.gdelt && GDELT_ENABLED) {
+    }
+    // GDELT asks for 1 request per 5s, so it stays serial — but only on the
+    // first two queries. Fanning all eight queries at it cost ~40s of sleep
+    // per wave for headlines the broad sweep rarely needed.
+    if (BEAT.gdelt && GDELT_ENABLED) {
+      for (const q of queries.slice(0, 2)) {
         try {
           signals.push(...(await fetchGdelt(q)));
         } catch (err) {
