@@ -30,10 +30,15 @@ const ROUTER_BASE_URLS: Record<ZeroGNetwork, string> = {
 };
 
 /** Catalog IDs verified live against the router. Override with ZERO_G_COMPUTE_MODEL. */
-const DEFAULT_MODEL = "deepseek-v4-flash";
+const DEFAULT_MODEL = "gpt-5.6-luna";
 
-/** Second chance when the primary deployment returns empty content. */
-const FALLBACK_MODEL = "glm-5";
+/**
+ * Second chances when the primary deployment returns empty content, in
+ * order. glm-5 and deepseek-v4-flash are gone from this list: both returned
+ * empty content on medium prompts and timed out on big generations across
+ * two full timed runs.
+ */
+const FALLBACK_MODELS = ["glm-5.3-flash", "0gm-1.0-35b-a3b"];
 
 function readEnv(name: string): string | undefined {
   const value = process.env[name];
@@ -168,16 +173,19 @@ export async function chatJson(opts: ChatJsonOptions): Promise<ChatJsonResult> {
     try {
       return await runCompletion(fetchImpl, keyed, opts, keyed.model);
     } catch (error) {
-      // One flaky deployment shouldn't sink the run: retry once on the
-      // fallback model when the primary comes back empty, same key.
+      // One flaky deployment shouldn't sink the run: walk the fallback
+      // models when the primary comes back empty, same key.
       const empty =
         error instanceof Error && error.message === "router returned empty content";
-      if (empty && !opts.noFallback && keyed.model !== FALLBACK_MODEL) {
-        try {
-          console.error(`primary model empty, retrying on ${FALLBACK_MODEL}`);
-          return await runCompletion(fetchImpl, keyed, opts, FALLBACK_MODEL);
-        } catch (fallbackError) {
-          lastError = fallbackError;
+      if (empty && !opts.noFallback) {
+        for (const fallback of FALLBACK_MODELS) {
+          if (fallback === keyed.model) continue;
+          try {
+            console.error(`primary model empty, retrying on ${fallback}`);
+            return await runCompletion(fetchImpl, keyed, opts, fallback);
+          } catch (fallbackError) {
+            lastError = fallbackError;
+          }
         }
       } else {
         lastError = error;
