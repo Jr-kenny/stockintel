@@ -1,5 +1,20 @@
 # Memory
 
+## 2026-09-13 — Live timing test of the fast defaults
+
+Ran the full grid locally (web on 8081, all ten agents, INQ-mtz9qy2cv57y):
+wave one closed in 45s with 38 claims, wave two early-graded with 66 claims
+capped to 30, complete with 9 events, 3 chains, 0 traceability issues,
+pricedIn priced. Collection took about 3.5 minutes versus 6.5 before, so the
+window cuts and parallel agents are proven. Total was still about 11 minutes
+because local LLM keys are degraded: 0G key 1 returns 402 on every call,
+the glm-5 primary comes back empty, and Zen fails with MissingSessionID, so
+every pass burned its retry budget before OpenRouter Nemotron wrote connect
+and key 2 wrote the report. Fund key 1 or drop it before judging. Spotted
+but not fixed: readout confidence reads 0 across all 22 entries on this run,
+looks like the weight math against collector-zero confidences, worth a look
+before judges read numbers. Test rig cleaned up, no stray processes or ports.
+
 ## 2026-09-13 — Judge-safe run time, 20m to about 5m
 
 Wait was wave one 90s plus wave two 300s plus up to two follow-up rounds
