@@ -1,5 +1,16 @@
 # Memory
 
+## 2026-09-13 — Luna leads the 0G chain, glm-5 gone
+
+User supplied three model IDs, all probed 200 live: gpt-5.6-luna answers
+clean with no reasoning block, glm-5.3-flash answers clean, 0gm-1.0-35b-a3b
+answers but burns its budget on reasoning. Chain is now luna first,
+glm-5.3-flash behind it, in-house 0gm third. glm-5 and deepseek-v4-flash
+fully removed after two timed runs proved their failure modes. Luna tried on
+real shapes before wiring: 12-claim grading chunk in 9s with clean JSON, 3
+hypotheses in 11s. Both are the exact prompts deepseek returned empty on.
+Build passes. AWS still untouched.
+
 ## 2026-09-13 — Deepseek default tried, mixed result
 
 Per user direction: 0G default model is now deepseek-v4-flash with glm-5 as
