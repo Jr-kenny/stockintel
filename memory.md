@@ -1,5 +1,19 @@
 # Memory
 
+## 2026-09-13 — Four-key local run completes in 16.1m, providers are the wall
+
+Full local grid on the four funded keys, INQ-mtzb7usa5vtc: wave one 45s with
+41 claims and 5 real LLM hypotheses, wave two early exit with 96 claims capped
+to 30, complete with 23 readout entries, 24 events, 2 chains, moderate
+confidence, ticker NVDA. No 402s anywhere, rotation is clean. But total time
+was 16.1 minutes and every slow minute was provider behavior: all five grade
+chunks burned the full chain (glm-5 empty, deepseek fallback empty,
+OpenRouter miss, Zen 400) before landing deterministic, and the 0G connect
+pass generated 10k tokens then failed its own parse. Collection is fixed,
+the remaining fat is all LLM flakiness. Candidates: drop Zen from the chain
+since it 400s on everything, flip the 0G default model to deepseek-v4-flash
+which answers clean, or both. Test rig cleaned up.
+
 ## 2026-09-13 — Depleted key fully removed, four funded keys live
 
 The ...a207 key was the old depleted one the user had asked to remove in an
