@@ -1,6 +1,10 @@
 # Memory
 
-## 2026-09-13 — mrcopy brain switched to luna
+## 2026-09-13 — mrcopy luna brain run live, provider llm
+
+Asked the box for today's setup over its local /ask endpoint. Answered with
+provider llm, real flow readback with HYPE, ETH, BTC and SOL leader flow,
+flat stance with watch items. Luna wiring proven end to end, not just config.
 
 Per user request: /opt/mrcopy/.env moved from OpenRouter nemotron free to
 the 0G router with gpt-5.6-luna, reusing the primary stockintel 0G key.
